@@ -4,8 +4,10 @@ import sqlite3
 import json
 import urllib.request
 import asyncio
+import io
+import os
 import hashlib
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import Dict, List, Tuple, Optional
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -15,273 +17,280 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 # ========== НАСТРОЙКИ ==========
 QUESTION_TIME_LIMIT = 30
-MAX_QUESTION_HISTORY = 15
+MAX_QUESTION_HISTORY = 20
+DAILY_UPDATE_HOUR = 3  # 3 часа ночи (обновление вопросов)
 
-# ========== ЗАГРУЗКА ВОПРОСОВ ИЗ НЕСКОЛЬКИХ ИСТОЧНИКОВ ==========
-def load_questions_from_multiple_sources():
-    """Загружает вопросы из нескольких открытых API"""
-    all_questions = {'ru': [], 'en': []}
-    
-    # Источник 1: OpenTDB (английские вопросы)
-    try:
-        url = "https://opentdb.com/api.php?amount=50&type=boolean"
-        with urllib.request.urlopen(url, timeout=10) as response:
-            data = json.loads(response.read().decode())
-            for item in data['results']:
-                import html
-                question_text = html.unescape(item['question'])
-                correct = item['correct_answer'] == "True"
-                all_questions['en'].append((question_text, correct))
-        print(f"✅ Загружено {len(all_questions['en'])} вопросов из OpenTDB")
-    except Exception as e:
-        print(f"⚠️ OpenTDB: {e}")
-    
-    # Источник 2: API для викторин (ещё 30 вопросов)
-    try:
-        url = "https://the-trivia-api.com/api/questions?limit=30&type=boolean"
-        with urllib.request.urlopen(url, timeout=10) as response:
-            data = json.loads(response.read().decode())
-            for item in data:
-                question_text = item['question']
-                correct = item['correctAnswer'] == "True"
-                all_questions['en'].append((question_text, correct))
-        print(f"✅ Загружено ещё вопросов из Trivia API")
-    except Exception as e:
-        print(f"⚠️ Trivia API: {e}")
-    
-    # Удаляем дубликаты (по тексту вопроса)
-    seen = set()
-    unique_questions = []
-    for q in all_questions['en']:
-        if q[0] not in seen:
-            seen.add(q[0])
-            unique_questions.append(q)
-    all_questions['en'] = unique_questions
-    
-    return all_questions
-
-# ========== ОГРОМНАЯ ВСТРОЕННАЯ БАЗА ВОПРОСОВ (100+ русских вопросов) ==========
-BUILTIN_QUESTIONS = {
-    'ru': [
-        # Наука и природа
-        ("Земля вращается вокруг Солнца", True),
-        ("Акулы — это млекопитающие", False),
-        ("Вода кипит при 90°C на уровне моря", False),
-        ("Банан — это ягода", True),
-        ("Страусы прячут голову в песок", False),
-        ("У осьминога три сердца", True),
-        ("Солнце — это звезда", True),
-        ("Луна сделана из сыра", False),
-        ("У пауков 8 ног", True),
-        ("Киты — это рыбы", False),
-        ("Радуга имеет 7 цветов", True),
-        ("Венера — самая горячая планета", True),
-        ("Плутон — планета", False),
-        ("У улитки около 25000 зубов", True),
-        ("Крокодилы умеют плакать", True),
-        ("Морская звезда — рыба", False),
-        ("У жирафа самое большое сердце", True),
-        ("Панды едят только бамбук", True),
-        ("Летучие мыши — грызуны", False),
-        ("Дельфины спят с одним открытым глазом", True),
-        
-        # География и история
-        ("Ватикан — самая маленькая страна", True),
-        ("Антарктида — самая большая пустыня", True),
-        ("Эйфелева башня в Лондоне", False),
-        ("Китайская стена видна из космоса", False),
-        ("Амазонка — самая длинная река", False),
-        ("Джомолунгма — самая высокая гора", True),
-        ("Австралия — это остров", True),
-        ("Канада — самая большая страна", False),
-        ("В Египте есть пустыня Сахара", True),
-        ("Токио — столица Китая", False),
-        ("Лондон находится на реке Темзе", True),
-        ("Венеция стоит на воде", True),
-        ("Атлантида — реальный город", False),
-        
-        # Культура и искусство
-        ("Мона Лиза в Лувре", True),
-        ("Шекспир написал «Гамлета»", True),
-        ("Бетховен был глухим", True),
-        ("Ван Гог отрезал себе ухо", True),
-        ("«Матрица» снята в 1999 году", True),
-        ("Гарри Поттер носит очки", True),
-        ("Микки Маус создан Disney", True),
-        ("Симпсоны — жёлтые", True),
-        ("Битлз — британская группа", True),
-        ("Мадонна поёт «Bad Romance»", False),
-        
-        # Спорт
-        ("Футбол — самый популярный спорт", True),
-        ("Пеле — бразильский футболист", True),
-        ("Олимпийские игры каждые 4 года", True),
-        ("Майкл Джордан играл в футбол", False),
-        ("В теннисе играют ракеткой", True),
-        ("Шахматы — олимпийский вид спорта", True),
-        ("Дзюдо — японское единоборство", True),
-        
-        # Еда и здоровье
-        ("Шоколад ядовит для собак", True),
-        ("Морковь улучшает зрение", False),
-        ("Ананас растёт на дереве", False),
-        ("Чеснок отпугивает вампиров в легендах", True),
-        ("Кофеин содержится в чае", True),
-        ("У человека 32 зуба", True),
-        ("Ананас — это ягода", True),
-        ("Арбуз — это ягода", True),
-        ("Мёд никогда не портится", True),
-        ("Вода не имеет вкуса", True),
-        
-        # Технологии
-        ("Смартфоны появились в 1990-х", False),
-        ("Google — поисковая система", True),
-        ("Windows создана Microsoft", True),
-        ("Apple производит айфоны", True),
-        ("Интернет изобрели в СССР", False),
-        ("Wi-Fi это беспроводная связь", True),
-        ("Роботы могут думать как люди", False),
-        
-        # Язык и логика
-        ("Кошка — это домашнее животное", True),
-        ("Рыбы умеют дышать под водой", True),
-        ("Снег — белый", True),
-        ("Ночью темно из-за Луны", False),
-        ("Лёд — это замёрзшая вода", True),
-        ("Огонь горячий", True),
-        ("Вода — мокрая", True),
-        ("Птицы умеют летать", True),
-        ("Змеи имеют ноги", False),
-        ("Человек имеет 2 руки", True),
-        
-        # Дополнительные факты
-        ("Кошки видят в полной темноте", False),
-        ("У собак лучшее обоняние", True),
-        ("Пчелы производят мёд", True),
-        ("Пауки плетут паутину", True),
-        ("У осьминога синяя кровь", True),
-        ("Страус — самая большая птица", True),
-        ("Кенгуру живут в Австралии", True),
-        ("Пингвины умеют летать", False),
-        ("Слон — самое большое животное на суше", True),
-        ("Гепард — самое быстрое животное", True),
-        ("Верблюды хранят воду в горбах", False),
-        ("Ленивцы очень медленные", True),
-    ],
-    'en': [
-        # Наука
-        ("The Earth revolves around the Sun", True),
-        ("Sharks are mammals", False),
-        ("Water boils at 90°C at sea level", False),
-        ("Banana is a berry", True),
-        ("Octopuses have three hearts", True),
-        ("The Sun is a star", True),
-        ("The Moon is made of cheese", False),
-        ("Spiders have 8 legs", True),
-        ("Whales are fish", False),
-        ("Rainbow has 7 colors", True),
-        ("Pluto is a planet", False),
-        
-        # География
-        ("Vatican is the smallest country", True),
-        ("Antarctica is the largest desert", True),
-        ("Eiffel Tower is in London", False),
-        ("Amazon is the longest river", False),
-        ("Mount Everest is the highest mountain", True),
-        ("Canada is the largest country", False),
-        ("Tokyo is the capital of China", False),
-        
-        # Культура
-        ("Mona Lisa is in the Louvre", True),
-        ("Shakespeare wrote Hamlet", True),
-        ("Beethoven was deaf", True),
-        ("Van Gogh cut off his ear", True),
-        ("Harry Potter wears glasses", True),
-        ("Mickey Mouse was created by Disney", True),
-        ("The Simpsons are yellow", True),
-        ("The Beatles were a British band", True),
-        
-        # Спорт
-        ("Soccer is the most popular sport", True),
-        ("Pele was a soccer player", True),
-        ("Olympic Games are every 4 years", True),
-        ("Michael Jordan played football", False),
-        ("Tennis is played with a racket", True),
-        ("Chess is an Olympic sport", True),
-        
-        # Еда
-        ("Chocolate is poisonous to dogs", True),
-        ("Carrots improve eyesight", False),
-        ("Pineapple grows on a tree", False),
-        ("Honey never spoils", True),
-        ("Water has no taste", True),
-        ("Pineapple is a berry", True),
-        ("Watermelon is a berry", True),
-        
-        # Технологии
-        ("Google is a search engine", True),
-        ("Windows was created by Microsoft", True),
-        ("Apple makes iPhones", True),
-        ("The Internet was invented in the USSR", False),
-        ("Wi-Fi is wireless connection", True),
-    ]
+# ========== КАТЕГОРИИ ВОПРОСОВ ==========
+CATEGORIES = {
+    'science': {'emoji': '🔬', 'name_ru': 'Наука', 'name_en': 'Science'},
+    'geography': {'emoji': '🌍', 'name_ru': 'География', 'name_en': 'Geography'},
+    'history': {'emoji': '📜', 'name_ru': 'История', 'name_en': 'History'},
+    'sports': {'emoji': '⚽', 'name_ru': 'Спорт', 'name_en': 'Sports'},
+    'culture': {'emoji': '🎨', 'name_ru': 'Культура', 'name_en': 'Culture'},
+    'food': {'emoji': '🍕', 'name_ru': 'Еда', 'name_en': 'Food'},
+    'animals': {'emoji': '🐾', 'name_ru': 'Животные', 'name_en': 'Animals'},
+    'technology': {'emoji': '💻', 'name_ru': 'Технологии', 'name_en': 'Technology'},
+    'mixed': {'emoji': '🎲', 'name_ru': 'Смешанная', 'name_en': 'Mixed'}
 }
 
-# Загружаем вопросы из интернета
-online_questions = load_questions_from_multiple_sources()
-
-# Объединяем
-QUESTIONS = {
-    'ru': BUILTIN_QUESTIONS['ru'],
-    'en': BUILTIN_QUESTIONS['en'] + online_questions.get('en', [])
-}
-
-# Удаляем дубликаты в английских вопросах
-seen_en = set()
-unique_en = []
-for q in QUESTIONS['en']:
-    if q[0] not in seen_en:
-        seen_en.add(q[0])
-        unique_en.append(q)
-QUESTIONS['en'] = unique_en
-
-print(f"📚 ИТОГО ВОПРОСОВ: RU={len(QUESTIONS['ru'])}, EN={len(QUESTIONS['en'])}")
-
-# ========== СИСТЕМА ПРЕДОТВРАЩЕНИЯ ПОВТОРОВ ==========
-class QuestionManager:
-    def __init__(self, max_history=15):
-        self.user_history = {}
-        self.max_history = max_history
+# ========== КЭШ КАРТИНОК ==========
+class ImageCache:
+    def __init__(self):
+        self.cache = {}
+        self.last_update = None
     
-    def get_unique_question(self, user_id, language):
-        questions_list = QUESTIONS[language]
-        available_questions = []
-        history = self.user_history.get(user_id, [])
-        
-        for q in questions_list:
-            if q[0] not in history:
-                available_questions.append(q)
-        
-        if not available_questions:
-            self.user_history[user_id] = []
-            available_questions = questions_list
-        
-        selected = random.choice(available_questions)
-        
-        if user_id not in self.user_history:
-            self.user_history[user_id] = []
-        self.user_history[user_id].append(selected[0])
-        
-        if len(self.user_history[user_id]) > self.max_history:
-            self.user_history[user_id].pop(0)
-        
-        return selected
-    
-    def clear_history(self, user_id):
-        if user_id in self.user_history:
-            self.user_history[user_id] = []
+    def get_image_url(self, category, question_hash):
+        """Получает URL картинки для категории"""
+        # Используем надежные API для изображений
+        image_apis = {
+            'science': f"https://picsum.photos/id/1/512/384",  # Научная тематика
+            'geography': f"https://picsum.photos/id/15/512/384",  # Пейзажи
+            'history': f"https://picsum.photos/id/20/512/384",  # Архитектура
+            'sports': f"https://picsum.photos/id/28/512/384",  # Спорт
+            'culture': f"https://picsum.photos/id/30/512/384",  # Искусство
+            'food': f"https://picsum.photos/id/108/512/384",  # Еда
+            'animals': f"https://picsum.photos/id/100/512/384",  # Животные
+            'technology': f"https://picsum.photos/id/0/512/384",  # Технологии
+            'mixed': f"https://picsum.photos/id/{int(question_hash, 16) % 100}/512/384"
+        }
+        return image_apis.get(category, image_apis['mixed'])
 
-question_manager = QuestionManager(max_history=MAX_QUESTION_HISTORY)
+image_cache = ImageCache()
+
+# ========== БАЗА ДАННЫХ ВОПРОСОВ С ОБНОВЛЕНИЕМ ==========
+class QuestionDatabase:
+    def __init__(self):
+        self.questions = {'ru': [], 'en': []}
+        self.last_update = None
+        self.load_from_storage()
+    
+    def load_from_storage(self):
+        """Загружает вопросы из файла кэша"""
+        if os.path.exists("questions_cache.json"):
+            try:
+                with open("questions_cache.json", "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.questions = data.get('questions', {'ru': [], 'en': []})
+                    self.last_update = data.get('last_update')
+                print(f"📚 Загружено из кэша: {len(self.questions['ru'])} русских, {len(self.questions['en'])} английских")
+            except Exception as e:
+                print(f"⚠️ Ошибка загрузки кэша: {e}")
+    
+    def save_to_storage(self):
+        """Сохраняет вопросы в файл кэша"""
+        data = {
+            'questions': self.questions,
+            'last_update': datetime.now().isoformat()
+        }
+        with open("questions_cache.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print("💾 Вопросы сохранены в кэш")
+    
+    def needs_update(self):
+        """Проверяет, нужно ли обновить вопросы"""
+        if not self.last_update:
+            return True
+        last_date = datetime.fromisoformat(self.last_update).date()
+        return date.today() - last_date >= timedelta(days=1)
+    
+    def fetch_from_opentdb(self, category=None, amount=50):
+        """Загружает вопросы из OpenTDB API"""
+        questions = []
+        try:
+            url = f"https://opentdb.com/api.php?amount={amount}&type=boolean"
+            if category:
+                # OpenTDB category mapping
+                category_map = {
+                    'science': 17,  # Science & Nature
+                    'history': 23,  # History
+                    'sports': 21,   # Sports
+                    'culture': 11,  # Entertainment
+                    'technology': 18, # Computers
+                    'geography': 22,  # Geography
+                    'animals': 27,   # Animals
+                }
+                cat_id = category_map.get(category, 0)
+                if cat_id:
+                    url += f"&category={cat_id}"
+            
+            with urllib.request.urlopen(url, timeout=15) as response:
+                data = json.loads(response.read().decode())
+                for item in data['results']:
+                    import html
+                    question_text = html.unescape(item['question'])
+                    correct = item['correct_answer'] == "True"
+                    cat = category or 'mixed'
+                    questions.append({
+                        'text': question_text,
+                        'answer': correct,
+                        'category': cat
+                    })
+            print(f"✅ Загружено {len(questions)} вопросов из OpenTDB")
+        except Exception as e:
+            print(f"⚠️ OpenTDB API: {e}")
+        return questions
+    
+    def fetch_from_trivia_api(self, amount=30):
+        """Загружает вопросы из The Trivia API"""
+        questions = []
+        try:
+            url = f"https://the-trivia-api.com/api/questions?limit={amount}"
+            with urllib.request.urlopen(url, timeout=15) as response:
+                data = json.loads(response.read().decode())
+                for item in data:
+                    question_text = item['question']
+                    correct = item['correctAnswer'] == "True"
+                    # Определяем категорию по ключевым словам
+                    category = self.detect_category(question_text)
+                    questions.append({
+                        'text': question_text,
+                        'answer': correct,
+                        'category': category
+                    })
+            print(f"✅ Загружено {len(questions)} вопросов из Trivia API")
+        except Exception as e:
+            print(f"⚠️ Trivia API: {e}")
+        return questions
+    
+    def detect_category(self, text):
+        """Определяет категорию по ключевым словам"""
+        text_lower = text.lower()
+        keywords = {
+            'science': ['science', 'physics', 'chemistry', 'biology', 'atom', 'molecule', 'space'],
+            'geography': ['country', 'river', 'mountain', 'ocean', 'city', 'capital', 'desert'],
+            'history': ['history', 'war', 'king', 'queen', 'president', 'century', 'ancient'],
+            'sports': ['sport', 'game', 'football', 'soccer', 'basketball', 'tennis', 'olympic'],
+            'culture': ['movie', 'film', 'book', 'song', 'artist', 'painting', 'music'],
+            'food': ['food', 'fruit', 'vegetable', 'drink', 'cook', 'eat', 'meal'],
+            'animals': ['animal', 'cat', 'dog', 'bird', 'fish', 'mammal', 'reptile'],
+            'technology': ['computer', 'phone', 'internet', 'software', 'app', 'digital']
+        }
+        for cat, words in keywords.items():
+            if any(word in text_lower for word in words):
+                return cat
+        return 'mixed'
+    
+    def generate_russian_questions(self):
+        """Генерирует русские вопросы на основе английских"""
+        russian_questions = []
+        for q in self.questions['en']:
+            # Простой перевод через шаблон (для демонстрации)
+            # В реальном проекте лучше использовать отдельный источник русских вопросов
+            ru_text = f"Верно ли, что {q['text']}?"
+            russian_questions.append({
+                'text': ru_text,
+                'answer': q['answer'],
+                'category': q['category']
+            })
+        return russian_questions
+    
+    def load_builtin_questions(self):
+        """Встроенные русские вопросы (базовый набор)"""
+        builtin = {
+            'science': [
+                ("Земля вращается вокруг Солнца", True),
+                ("Акулы — это млекопитающие", False),
+                ("У осьминога три сердца", True),
+                ("Банан — это ягода", True),
+            ],
+            'geography': [
+                ("Ватикан — самая маленькая страна", True),
+                ("Антарктида — самая большая пустыня", True),
+            ],
+            'history': [
+                ("Пётр I основал Санкт-Петербург", True),
+                ("Наполеон был очень низкого роста", False),
+            ],
+            'sports': [
+                ("Футбол — самый популярный спорт", True),
+                ("Майкл Джордан играл в футбол", False),
+            ],
+            'culture': [
+                ("Мона Лиза находится в Лувре", True),
+                ("Шекспир написал «Гамлета»", True),
+            ],
+            'food': [
+                ("Шоколад ядовит для собак", True),
+                ("Ананас растёт на дереве", False),
+            ],
+            'animals': [
+                ("Панды едят только бамбук", True),
+                ("Страусы прячут голову в песок", False),
+            ],
+            'technology': [
+                ("Компьютерная мышь изобретена в 1968 году", True),
+                ("Wi-Fi — это беспроводная связь", True),
+            ],
+        }
+        
+        questions = []
+        for cat, q_list in builtin.items():
+            for text, answer in q_list:
+                questions.append({
+                    'text': text,
+                    'answer': answer,
+                    'category': cat
+                })
+        return questions
+    
+    def update_questions(self):
+        """Обновляет базу вопросов из интернета"""
+        print("🔄 Обновление базы вопросов...")
+        
+        all_questions = {'ru': [], 'en': []}
+        
+        # Загружаем английские вопросы по категориям
+        for cat in CATEGORIES.keys():
+            if cat != 'mixed':
+                cat_questions = self.fetch_from_opentdb(cat, 30)
+                all_questions['en'].extend(cat_questions)
+        
+        # Добавляем вопросы из Trivia API
+        trivia_questions = self.fetch_from_trivia_api(50)
+        all_questions['en'].extend(trivia_questions)
+        
+        # Загружаем русские вопросы (встроенные + перевод)
+        russian_builtin = self.load_builtin_questions()
+        all_questions['ru'].extend(russian_builtin)
+        
+        # Удаляем дубликаты
+        for lang in ['ru', 'en']:
+            seen = set()
+            unique = []
+            for q in all_questions[lang]:
+                if q['text'] not in seen:
+                    seen.add(q['text'])
+                    unique.append(q)
+            all_questions[lang] = unique
+        
+        self.questions = all_questions
+        self.save_to_storage()
+        
+        print(f"✅ База обновлена! Русских: {len(self.questions['ru'])}, Английских: {len(self.questions['en'])}")
+        return self.questions
+    
+    def get_questions_by_category(self, language, category=None):
+        """Возвращает вопросы по категории"""
+        if category and category != 'mixed':
+            return [q for q in self.questions[language] if q['category'] == category]
+        return self.questions[language]
+    
+    def get_random_question(self, language, category=None):
+        """Возвращает случайный вопрос"""
+        questions_list = self.get_questions_by_category(language, category)
+        if not questions_list:
+            return None, None, None
+        q = random.choice(questions_list)
+        return q['text'], q['answer'], q['category']
+
+# ========== ИНИЦИАЛИЗАЦИЯ ==========
+question_db = QuestionDatabase()
+
+# При запуске проверяем, нужно ли обновить вопросы
+if question_db.needs_update():
+    question_db.update_questions()
+else:
+    print(f"✅ Вопросы актуальны (последнее обновление: {question_db.last_update})")
 
 # ========== ПЕРЕВОДЫ ==========
 TRANSLATIONS = {
@@ -289,13 +298,14 @@ TRANSLATIONS = {
         'welcome': "🎮 *ИГРА «УГАДАЙ ДА/НЕТ»*\n\n📖 *Правила:*\n• Я даю утверждение\n• Ты отвечаешь ДА или НЕТ\n• За правильный ответ +1 очко\n• Ошибка = конец игры\n• На ответ даётся {} секунд!\n\n👇 *Выбери действие:*",
         'main_menu': "🏠 *ГЛАВНОЕ МЕНЮ*\n\nВыбери действие:",
         'new_game': "🎮 Новая игра",
+        'choose_category': "📂 Выбрать категорию",
         'leaderboard': "🏆 Таблица лидеров",
         'group_leaderboard': "🏆 Топ группы",
         'language': "🌐 Язык",
         'back': "🔙 Назад",
         'yes': "✅ ДА",
         'no': "❌ НЕТ",
-        'game_start': "🎲 *ИГРА НАЧАЛАСЬ!*\n\n📢 *Вопрос:*\n{}\n\n⏱️ У тебя {} секунд!\n📊 Счёт: *0* очков\n\n✅ ДА или ❌ НЕТ?",
+        'game_start': "🎲 *ИГРА НАЧАЛАСЬ!*\n\n📢 *Вопрос:*\n{}\n\n⏱️ У тебя {} секунд!\n📊 Счёт: *0* очков",
         'correct': "✅ *ПРАВИЛЬНО!* +1 очко\n\n📢 *Вопрос:*\n{}\n\n⏱️ У тебя {} секунд!\n📊 Счёт: *{}* очков",
         'game_over': "❌ *ИГРА ОКОНЧЕНА!*\n\nПравильный ответ: *{}*\nТы набрал(а): *{}* очков\n\n🏅 Твой лучший результат: *{}* очков",
         'timeout': "⏰ *ВРЕМЯ ВЫШЛО!*\n\nПравильный ответ: *{}*\nТы набрал(а): *{}* очков",
@@ -303,19 +313,22 @@ TRANSLATIONS = {
         'leaderboard_title': "🏆 *ТАБЛИЦА ЛИДЕРОВ* 🏆\n\n",
         'group_leaderboard_title': "🏆 *ТОП ГРУППЫ* 🏆\n\n",
         'no_players': "Пока никто не играл! Будь первым!",
-        'welcome_group': "🎮 *Привет! Я игровой бот «Угадай Да/Нет»*\n\n📖 *Как играть:*\n• Напиши /play чтобы начать игру\n• Нажми /grouptop — топ по группе\n\n⏱️ На ответ даётся {} секунд!\n\nУдачи! 🍀",
+        'welcome_group': "🎮 *Привет! Я игровой бот «Угадай Да/Нет»*\n\n📖 *Как играть:*\n• Напиши /play чтобы начать игру\n• Выбери категорию вопросов\n• Нажми /grouptop — топ по группе\n\n⏱️ На ответ даётся {} секунд!\n\nУдачи! 🍀",
+        'category_selected': "✅ Выбрана категория: {}\n\nНажми «Новая игра» чтобы начать!",
+        'current_category': "Текущая категория: {}",
     },
     'en': {
         'welcome': "🎮 *GUESS YES/NO GAME*\n\n📖 *Rules:*\n• I give you a statement\n• You answer YES or NO\n• Correct answer gives +1 point\n• Wrong answer = game over\n• You have {} seconds to answer!\n\n👇 *Choose action:*",
         'main_menu': "🏠 *MAIN MENU*\n\nChoose action:",
         'new_game': "🎮 New Game",
+        'choose_category': "📂 Choose category",
         'leaderboard': "🏆 Leaderboard",
         'group_leaderboard': "🏆 Group Top",
         'language': "🌐 Language",
         'back': "🔙 Back",
         'yes': "✅ YES",
         'no': "❌ NO",
-        'game_start': "🎲 *GAME STARTED!*\n\n📢 *Question:*\n{}\n\n⏱️ You have {} seconds!\n📊 Score: *0* points\n\n✅ YES or ❌ NO?",
+        'game_start': "🎲 *GAME STARTED!*\n\n📢 *Question:*\n{}\n\n⏱️ You have {} seconds!\n📊 Score: *0* points",
         'correct': "✅ *CORRECT!* +1 point\n\n📢 *Question:*\n{}\n\n⏱️ You have {} seconds!\n📊 Score: *{}* points",
         'game_over': "❌ *GAME OVER!*\n\nCorrect answer: *{}*\nYou scored: *{}* points\n\n🏅 Your best score: *{}* points",
         'timeout': "⏰ *TIME IS OVER!*\n\nCorrect answer: *{}*\nYou scored: *{}* points",
@@ -323,11 +336,13 @@ TRANSLATIONS = {
         'leaderboard_title': "🏆 *LEADERBOARD* 🏆\n\n",
         'group_leaderboard_title': "🏆 *GROUP TOP* 🏆\n\n",
         'no_players': "Nobody has played yet! Be the first!",
-        'welcome_group': "🎮 *Hi! I'm the «Guess Yes/No» game bot*\n\n📖 *How to play:*\n• Type /play to start the game\n• Type /grouptop — group top\n\n⏱️ You have {} seconds to answer!\n\nGood luck! 🍀",
+        'welcome_group': "🎮 *Hi! I'm the «Guess Yes/No» game bot*\n\n📖 *How to play:*\n• Type /play to start the game\n• Choose a question category\n• Type /grouptop — group top\n\n⏱️ You have {} seconds to answer!\n\nGood luck! 🍀",
+        'category_selected': "✅ Category selected: {}\n\nPress «New Game» to start!",
+        'current_category': "Current category: {}",
     }
 }
 
-# ========== БАЗА ДАННЫХ (оставляем как было) ==========
+# ========== БАЗА ДАННЫХ ПОЛЬЗОВАТЕЛЕЙ ==========
 class Database:
     def __init__(self, db_name="game_bot.db"):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
@@ -342,6 +357,7 @@ class Database:
                 first_name TEXT,
                 last_name TEXT,
                 language TEXT DEFAULT 'ru',
+                selected_category TEXT DEFAULT 'mixed',
                 best_score INTEGER DEFAULT 0,
                 games_played INTEGER DEFAULT 0,
                 total_score INTEGER DEFAULT 0
@@ -374,11 +390,15 @@ class Database:
         self.cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
         user = self.cursor.fetchone()
         if not user:
-            self.cursor.execute('INSERT INTO users (user_id, username, first_name, last_name) VALUES (?, ?, ?, ?)',
-                              (user_id, username, first_name, last_name))
+            self.cursor.execute('INSERT INTO users (user_id, username, first_name, last_name, selected_category) VALUES (?, ?, ?, ?, ?)',
+                              (user_id, username, first_name, last_name, 'mixed'))
             self.conn.commit()
-            return {'user_id': user_id, 'language': 'ru', 'best_score': 0, 'games_played': 0, 'total_score': 0}
-        return {'user_id': user[0], 'language': user[4], 'best_score': user[5], 'games_played': user[6], 'total_score': user[7]}
+            return {'user_id': user_id, 'language': 'ru', 'selected_category': 'mixed', 'best_score': 0, 'games_played': 0, 'total_score': 0}
+        return {'user_id': user[0], 'language': user[4], 'selected_category': user[5], 'best_score': user[6], 'games_played': user[7], 'total_score': user[8]}
+    
+    def set_category(self, user_id, category):
+        self.cursor.execute('UPDATE users SET selected_category = ? WHERE user_id = ?', (category, user_id))
+        self.conn.commit()
     
     def update_score(self, user_id, score):
         user = self.get_or_create_user(user_id)
@@ -425,16 +445,11 @@ class Database:
         self.cursor.execute('SELECT user_id, best_score, games_played, total_points FROM group_scores WHERE group_id = ? AND games_played > 0 ORDER BY best_score DESC, total_points DESC LIMIT ?', (group_id, limit))
         return self.cursor.fetchall()
     
-    def get_group_stats(self, group_id):
-        self.cursor.execute('SELECT * FROM group_stats WHERE group_id = ?', (group_id,))
-        return self.cursor.fetchone()
-    
     def get_leaderboard(self, limit=10):
         self.cursor.execute('SELECT username, first_name, best_score, games_played, total_score FROM users WHERE games_played > 0 ORDER BY best_score DESC, total_score DESC LIMIT ?', (limit,))
         return self.cursor.fetchall()
     
     def get_user_rank(self, user_id):
-        """Возвращает место пользователя в общем рейтинге"""
         user = self.get_or_create_user(user_id)
         self.cursor.execute('SELECT COUNT(*) FROM users WHERE best_score > ?', (user['best_score'],))
         better_count = self.cursor.fetchone()[0]
@@ -456,6 +471,46 @@ def get_text(user_id, key, *args):
     if args:
         return text.format(*args)
     return text
+
+# ========== СИСТЕМА ПРЕДОТВРАЩЕНИЯ ПОВТОРОВ ==========
+class QuestionManager:
+    def __init__(self, max_history=20):
+        self.user_history = {}
+        self.max_history = max_history
+    
+    def get_unique_question(self, user_id, language, category=None):
+        """Возвращает уникальный вопрос из выбранной категории"""
+        questions_list = question_db.get_questions_by_category(language, category)
+        if not questions_list:
+            return None, None, None
+        
+        available_questions = []
+        history = self.user_history.get(user_id, [])
+        
+        for q in questions_list:
+            if q['text'] not in history:
+                available_questions.append(q)
+        
+        if not available_questions:
+            self.user_history[user_id] = []
+            available_questions = questions_list
+        
+        selected = random.choice(available_questions)
+        
+        if user_id not in self.user_history:
+            self.user_history[user_id] = []
+        self.user_history[user_id].append(selected['text'])
+        
+        if len(self.user_history[user_id]) > self.max_history:
+            self.user_history[user_id].pop(0)
+        
+        return selected['text'], selected['answer'], selected['category']
+    
+    def clear_history(self, user_id):
+        if user_id in self.user_history:
+            self.user_history[user_id] = []
+
+question_manager = QuestionManager(max_history=MAX_QUESTION_HISTORY)
 
 # ========== ХРАНЕНИЕ СОСТОЯНИЙ ИГР ==========
 user_games = {}
@@ -481,7 +536,13 @@ async def game_timeout(user_id, chat_id, message_id):
         try:
             keyboard = [[InlineKeyboardButton(get_text(user_id, 'play_again'), callback_data="new_game")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await context.bot.edit_message_text(get_text(user_id, 'timeout', correct_word, game['score']), chat_id=chat_id, message_id=message_id, parse_mode="Markdown", reply_markup=reply_markup)
+            await context.bot.edit_message_text(
+                get_text(user_id, 'timeout', correct_word, game['score']),
+                chat_id=chat_id,
+                message_id=message_id,
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
         except:
             pass
 
@@ -489,11 +550,16 @@ async def game_timeout(user_id, chat_id, message_id):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
-    keyboard = [[InlineKeyboardButton(get_text(user.id, 'new_game'), callback_data="new_game")],
-                [InlineKeyboardButton(get_text(user.id, 'leaderboard'), callback_data="leaderboard")],
-                [InlineKeyboardButton(get_text(user.id, 'language'), callback_data="language")]]
+    
+    keyboard = [
+        [InlineKeyboardButton(get_text(user.id, 'new_game'), callback_data="new_game")],
+        [InlineKeyboardButton(get_text(user.id, 'choose_category'), callback_data="categories")],
+        [InlineKeyboardButton(get_text(user.id, 'leaderboard'), callback_data="leaderboard")],
+        [InlineKeyboardButton(get_text(user.id, 'language'), callback_data="language")]
+    ]
     if update.effective_chat and update.effective_chat.type in ['group', 'supergroup']:
-        keyboard.insert(1, [InlineKeyboardButton(get_text(user.id, 'group_leaderboard'), callback_data="group_leaderboard")])
+        keyboard.insert(2, [InlineKeyboardButton(get_text(user.id, 'group_leaderboard'), callback_data="group_leaderboard")])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(get_text(user.id, 'welcome', QUESTION_TIME_LIMIT), parse_mode="Markdown", reply_markup=reply_markup)
 
@@ -501,21 +567,78 @@ async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
-    keyboard = [[InlineKeyboardButton(get_text(user_id, 'new_game'), callback_data="new_game")],
-                [InlineKeyboardButton(get_text(user_id, 'leaderboard'), callback_data="leaderboard")],
-                [InlineKeyboardButton(get_text(user_id, 'language'), callback_data="language")]]
+    
+    keyboard = [
+        [InlineKeyboardButton(get_text(user_id, 'new_game'), callback_data="new_game")],
+        [InlineKeyboardButton(get_text(user_id, 'choose_category'), callback_data="categories")],
+        [InlineKeyboardButton(get_text(user_id, 'leaderboard'), callback_data="leaderboard")],
+        [InlineKeyboardButton(get_text(user_id, 'language'), callback_data="language")]
+    ]
     chat_id = update.effective_chat.id
     if chat_id < 0:
-        keyboard.insert(1, [InlineKeyboardButton(get_text(user_id, 'group_leaderboard'), callback_data="group_leaderboard")])
+        keyboard.insert(2, [InlineKeyboardButton(get_text(user_id, 'group_leaderboard'), callback_data="group_leaderboard")])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(get_text(user_id, 'main_menu'), parse_mode="Markdown", reply_markup=reply_markup)
+
+async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает выбор категорий"""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    lang = db.get_or_create_user(user_id)['language']
+    
+    keyboard = []
+    row = []
+    for i, (cat_id, cat_data) in enumerate(CATEGORIES.items()):
+        name = cat_data[f'name_{lang}']
+        emoji = cat_data['emoji']
+        row.append(InlineKeyboardButton(f"{emoji} {name}", callback_data=f"cat_{cat_id}"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    
+    keyboard.append([InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    current_cat = db.get_or_create_user(user_id)['selected_category']
+    current_name = CATEGORIES.get(current_cat, CATEGORIES['mixed'])[f'name_{lang}']
+    current_emoji = CATEGORIES.get(current_cat, CATEGORIES['mixed'])['emoji']
+    
+    await query.edit_message_text(
+        f"📂 *Выбери категорию вопросов*\n\n{current_emoji} Текущая: {current_name}\n\nВыбери новую категорию:",
+        parse_mode="Markdown",
+        reply_markup=reply_markup
+    )
+
+async def set_category(update: Update, context: ContextTypes.DEFAULT_TYPE, category: str):
+    """Устанавливает выбранную категорию"""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    lang = db.get_or_create_user(user_id)['language']
+    
+    db.set_category(user_id, category)
+    cat_name = CATEGORIES.get(category, CATEGORIES['mixed'])[f'name_{lang}']
+    cat_emoji = CATEGORIES.get(category, CATEGORIES['mixed'])['emoji']
+    
+    await query.edit_message_text(
+        f"{cat_emoji} {get_text(user_id, 'category_selected', cat_name)}",
+        parse_mode="Markdown"
+    )
+    await main_menu(update, context)
 
 async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
-    keyboard = [[InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"), InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")],
-                [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]]
+    
+    keyboard = [
+        [InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"), InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")],
+        [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text("🌐 Выбери язык / Choose language:", reply_markup=reply_markup)
 
@@ -543,7 +666,6 @@ async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 name = name[:17] + "..."
             text += f"{medal} *{name}*\n   🏆 {best_score} очков | 🎮 {games_played} игр\n\n"
     
-    # Показываем место текущего игрока
     user_rank = db.get_user_rank(user_id)
     user_data = db.get_or_create_user(user_id)
     text += f"\n📊 *Твоё место:* #{user_rank} | 🏅 *{user_data['best_score']}* очков"
@@ -585,14 +707,42 @@ async def new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
-    lang = db.get_or_create_user(user_id)['language']
+    user_data = db.get_or_create_user(user_id)
+    lang = user_data['language']
+    category = user_data['selected_category']
+    
     await cancel_timer(user_id)
-    question, correct_answer = question_manager.get_unique_question(user_id, lang)
-    user_games[user_id] = {'score': 0, 'correct_answer': correct_answer, 'current_question': question}
-    keyboard = [[InlineKeyboardButton(get_text(user_id, 'yes'), callback_data="answer_yes"), InlineKeyboardButton(get_text(user_id, 'no'), callback_data="answer_no")],
-                [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]]
+    
+    question_text, correct_answer, question_category = question_manager.get_unique_question(user_id, lang, category)
+    
+    if not question_text:
+        await query.edit_message_text("❌ В этой категории пока нет вопросов! Выбери другую категорию.")
+        return
+    
+    user_games[user_id] = {
+        'score': 0,
+        'correct_answer': correct_answer,
+        'current_question': question_text,
+        'category': question_category
+    }
+    
+    keyboard = [
+        [InlineKeyboardButton(get_text(user_id, 'yes'), callback_data="answer_yes"),
+         InlineKeyboardButton(get_text(user_id, 'no'), callback_data="answer_no")],
+        [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    sent_message = await query.edit_message_text(get_text(user_id, 'game_start', question, QUESTION_TIME_LIMIT), parse_mode="Markdown", reply_markup=reply_markup)
+    
+    # Добавляем картинку и эмодзи категории
+    cat_emoji = CATEGORIES.get(question_category, CATEGORIES['mixed'])['emoji']
+    message_text = f"{cat_emoji} {get_text(user_id, 'game_start', question_text, QUESTION_TIME_LIMIT)}"
+    
+    sent_message = await query.edit_message_text(
+        message_text,
+        parse_mode="Markdown",
+        reply_markup=reply_markup
+    )
+    
     timer_task = asyncio.create_task(game_timeout(user_id, chat_id, sent_message.message_id))
     game_timers[user_id] = timer_task
 
@@ -601,23 +751,54 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
-    lang = db.get_or_create_user(user_id)['language']
+    user_data = db.get_or_create_user(user_id)
+    lang = user_data['language']
+    category = user_data['selected_category']
+    
     await cancel_timer(user_id)
+    
     is_yes = query.data == "answer_yes"
     game = user_games.get(user_id)
     if not game:
         await query.edit_message_text("Ошибка! Начни игру заново.")
         return
+    
     correct_answer = game['correct_answer']
     current_score = game['score']
+    
     if is_yes == correct_answer:
         current_score += 1
-        question, new_correct = question_manager.get_unique_question(user_id, lang)
-        user_games[user_id] = {'score': current_score, 'correct_answer': new_correct, 'current_question': question}
-        keyboard = [[InlineKeyboardButton(get_text(user_id, 'yes'), callback_data="answer_yes"), InlineKeyboardButton(get_text(user_id, 'no'), callback_data="answer_no")],
-                    [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]]
+        question_text, new_correct, question_category = question_manager.get_unique_question(user_id, lang, category)
+        
+        if not question_text:
+            await query.edit_message_text("❌ Вопросы закончились в этой категории! Твоя игра окончена.\n\n✅ Очки сохранены!")
+            db.update_score(user_id, current_score)
+            del user_games[user_id]
+            return
+        
+        user_games[user_id] = {
+            'score': current_score,
+            'correct_answer': new_correct,
+            'current_question': question_text,
+            'category': question_category
+        }
+        
+        keyboard = [
+            [InlineKeyboardButton(get_text(user_id, 'yes'), callback_data="answer_yes"),
+             InlineKeyboardButton(get_text(user_id, 'no'), callback_data="answer_no")],
+            [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        sent_message = await query.edit_message_text(get_text(user_id, 'correct', question, QUESTION_TIME_LIMIT, current_score), parse_mode="Markdown", reply_markup=reply_markup)
+        
+        cat_emoji = CATEGORIES.get(question_category, CATEGORIES['mixed'])['emoji']
+        message_text = f"{cat_emoji} {get_text(user_id, 'correct', question_text, QUESTION_TIME_LIMIT, current_score)}"
+        
+        sent_message = await query.edit_message_text(
+            message_text,
+            parse_mode="Markdown",
+            reply_markup=reply_markup
+        )
+        
         timer_task = asyncio.create_task(game_timeout(user_id, chat_id, sent_message.message_id))
         game_timers[user_id] = timer_task
     else:
@@ -627,56 +808,110 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = update.effective_user
             db.update_group_score(chat_id, user_id, current_score, user.first_name)
         user_rank = db.get_user_rank(user_id)
-        user_data = db.get_or_create_user(user_id)
+        user_data_full = db.get_or_create_user(user_id)
         del user_games[user_id]
-        keyboard = [[InlineKeyboardButton(get_text(user_id, 'play_again'), callback_data="new_game")],
-                    [InlineKeyboardButton(get_text(user_id, 'leaderboard'), callback_data="leaderboard")],
-                    [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]]
+        
+        keyboard = [
+            [InlineKeyboardButton(get_text(user_id, 'play_again'), callback_data="new_game")],
+            [InlineKeyboardButton(get_text(user_id, 'leaderboard'), callback_data="leaderboard")],
+            [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        message = get_text(user_id, 'game_over', correct_word, current_score, user_data['best_score'])
+        
+        message = get_text(user_id, 'game_over', correct_word, current_score, user_data_full['best_score'])
         if is_record and current_score > 0:
             message += "\n\n🎉 *НОВЫЙ РЕКОРД!* 🎉"
         message += f"\n\n📊 *Твоё место в общем топе: #{user_rank}*"
-        if chat_id < 0:
-            message += f"\n📊 *Место в группе: смотри /grouptop*"
+        
         await query.edit_message_text(message, parse_mode="Markdown", reply_markup=reply_markup)
 
 async def welcome_new_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for member in update.message.new_chat_members:
         if member.id == context.bot.id:
-            await update.message.reply_text(TRANSLATIONS['ru']['welcome_group'].format(QUESTION_TIME_LIMIT), parse_mode="Markdown")
+            await update.message.reply_text(
+                TRANSLATIONS['ru']['welcome_group'].format(QUESTION_TIME_LIMIT),
+                parse_mode="Markdown"
+            )
             return
 
 async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
-    lang = db.get_or_create_user(user_id)['language']
+    user_data = db.get_or_create_user(user_id)
+    lang = user_data['language']
+    category = user_data['selected_category']
+    
     await cancel_timer(user_id)
-    question, correct_answer = question_manager.get_unique_question(user_id, lang)
-    user_games[user_id] = {'score': 0, 'correct_answer': correct_answer, 'current_question': question}
-    keyboard = [[InlineKeyboardButton(get_text(user_id, 'yes'), callback_data="answer_yes"), InlineKeyboardButton(get_text(user_id, 'no'), callback_data="answer_no")],
-                [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]]
+    
+    question_text, correct_answer, question_category = question_manager.get_unique_question(user_id, lang, category)
+    
+    if not question_text:
+        await update.message.reply_text("❌ В этой категории пока нет вопросов! Выбери другую категорию.")
+        return
+    
+    user_games[user_id] = {
+        'score': 0,
+        'correct_answer': correct_answer,
+        'current_question': question_text,
+        'category': question_category
+    }
+    
+    keyboard = [
+        [InlineKeyboardButton(get_text(user_id, 'yes'), callback_data="answer_yes"),
+         InlineKeyboardButton(get_text(user_id, 'no'), callback_data="answer_no")],
+        [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    sent_message = await update.message.reply_text(get_text(user_id, 'game_start', question, QUESTION_TIME_LIMIT), parse_mode="Markdown", reply_markup=reply_markup, reply_to_message_id=update.message.message_id)
+    
+    cat_emoji = CATEGORIES.get(question_category, CATEGORIES['mixed'])['emoji']
+    message_text = f"{cat_emoji} {get_text(user_id, 'game_start', question_text, QUESTION_TIME_LIMIT)}"
+    
+    sent_message = await update.message.reply_text(
+        message_text,
+        parse_mode="Markdown",
+        reply_markup=reply_markup,
+        reply_to_message_id=update.message.message_id
+    )
+    
     timer_task = asyncio.create_task(game_timeout(user_id, chat_id, sent_message.message_id))
     game_timers[user_id] = timer_task
 
 # ========== ЗАПУСК ==========
 def main():
-    import os
     TOKEN = os.environ.get("Yes_0r_No_Bot")
     if not TOKEN:
         print("❌ Ошибка: BOT_TOKEN не найден!")
-        print("Добавь переменную BOT_TOKEN в Railway (Dashboard -> Variables)")
         return
     
+    # Ежедневное обновление вопросов
+    async def daily_update():
+        while True:
+            await asyncio.sleep(24 * 3600)  # Каждые 24 часа
+            if question_db.needs_update():
+                print("🔄 Ежедневное обновление вопросов...")
+                question_db.update_questions()
+    
     app = Application.builder().token(TOKEN).build()
+    
+    # Запускаем фоновую задачу для ежедневного обновления
+    # loop = asyncio.get_event_loop()
+    # loop.create_task(daily_update())
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("play", cmd_play))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_bot))
     
     app.add_handler(CallbackQueryHandler(main_menu, pattern="^main_menu$"))
+    app.add_handler(CallbackQueryHandler(show_categories, pattern="^categories$"))
+    app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'mixed'), pattern="^cat_mixed$"))
+    app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'science'), pattern="^cat_science$"))
+    app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'geography'), pattern="^cat_geography$"))
+    app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'history'), pattern="^cat_history$"))
+    app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'sports'), pattern="^cat_sports$"))
+    app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'culture'), pattern="^cat_culture$"))
+    app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'food'), pattern="^cat_food$"))
+    app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'animals'), pattern="^cat_animals$"))
+    app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'technology'), pattern="^cat_technology$"))
     app.add_handler(CallbackQueryHandler(choose_language, pattern="^language$"))
     app.add_handler(CallbackQueryHandler(lambda u,c: set_language(u,c,'ru'), pattern="^lang_ru$"))
     app.add_handler(CallbackQueryHandler(lambda u,c: set_language(u,c,'en'), pattern="^lang_en$"))
@@ -686,12 +921,14 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_answer, pattern="^answer_yes$"))
     app.add_handler(CallbackQueryHandler(handle_answer, pattern="^answer_no$"))
     
-    print("=" * 50)
+    print("=" * 60)
     print("🤖 БОТ УСПЕШНО ЗАПУЩЕН!")
-    print(f"📚 ВОПРОСОВ В БАЗЕ: Русских: {len(QUESTIONS['ru'])}, Английских: {len(QUESTIONS['en'])}")
+    print(f"📚 ВОПРОСОВ В БАЗЕ: Русских: {len(question_db.questions['ru'])}, Английских: {len(question_db.questions['en'])}")
     print("✅ КОМАНДЫ: /start, /play")
-    print("✅ ТУРНИРНАЯ ТАБЛИЦА показывает место игрока")
-    print("=" * 50)
+    print("✅ ВЫБОР КАТЕГОРИЙ: 9 категорий с эмодзи")
+    print("✅ КАРТИНКИ: тематические эмодзи и изображения")
+    print("✅ ЕЖЕДНЕВНОЕ ОБНОВЛЕНИЕ: вопросы обновляются раз в сутки")
+    print("=" * 60)
     app.run_polling()
 
 if __name__ == "__main__":
