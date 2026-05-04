@@ -66,7 +66,6 @@ class QuestionDatabase:
         }
         with open("questions_cache.json", "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print("💾 Вопросы сохранены в кэш")
     
     def needs_update(self):
         """Проверяет, нужно ли обновить вопросы"""
@@ -82,13 +81,8 @@ class QuestionDatabase:
             url = f"https://opentdb.com/api.php?amount={amount}&type=boolean"
             if category:
                 category_map = {
-                    'science': 17,
-                    'history': 23,
-                    'sports': 21,
-                    'culture': 11,
-                    'technology': 18,
-                    'geography': 22,
-                    'animals': 27,
+                    'science': 17, 'history': 23, 'sports': 21,
+                    'culture': 11, 'technology': 18, 'geography': 22, 'animals': 27,
                 }
                 cat_id = category_map.get(category, 0)
                 if cat_id:
@@ -99,50 +93,27 @@ class QuestionDatabase:
                 for item in data['results']:
                     question_text = html.unescape(item['question'])
                     correct = item['correct_answer'] == "True"
-                    cat = category or 'mixed'
                     questions.append({
                         'text': question_text,
                         'answer': correct,
-                        'category': cat
+                        'category': category or 'mixed'
                     })
-            print(f"✅ Загружено {len(questions)} вопросов из OpenTDB")
         except Exception as e:
             print(f"⚠️ OpenTDB API: {e}")
-        return questions
-    
-    def fetch_from_trivia_api(self, amount=30):
-        """Загружает вопросы из The Trivia API"""
-        questions = []
-        try:
-            url = f"https://the-trivia-api.com/api/questions?limit={amount}"
-            with urllib.request.urlopen(url, timeout=15) as response:
-                data = json.loads(response.read().decode())
-                for item in data:
-                    question_text = item['question']
-                    correct = item['correctAnswer'] == "True"
-                    category = self.detect_category(question_text)
-                    questions.append({
-                        'text': question_text,
-                        'answer': correct,
-                        'category': category
-                    })
-            print(f"✅ Загружено {len(questions)} вопросов из Trivia API")
-        except Exception as e:
-            print(f"⚠️ Trivia API: {e}")
         return questions
     
     def detect_category(self, text):
         """Определяет категорию по ключевым словам"""
         text_lower = text.lower()
         keywords = {
-            'science': ['science', 'physics', 'chemistry', 'biology', 'atom', 'molecule', 'space', 'planet', 'star', 'galaxy', 'earth', 'sun', 'moon', 'solar', 'gravity', 'element', 'oxygen', 'hydrogen', 'carbon'],
-            'geography': ['country', 'river', 'mountain', 'ocean', 'city', 'capital', 'desert', 'island', 'continent', 'sea', 'lake', 'forest', 'volcano', 'earthquake'],
-            'history': ['history', 'war', 'king', 'queen', 'president', 'century', 'ancient', 'empire', 'revolution', 'battle', 'civilization', 'dynasty', 'emperor'],
-            'sports': ['sport', 'game', 'football', 'soccer', 'basketball', 'tennis', 'olympic', 'championship', 'player', 'team', 'goal', 'match', 'race'],
-            'culture': ['movie', 'film', 'book', 'song', 'artist', 'painting', 'music', 'theater', 'novel', 'poem', 'actor', 'actress', 'director', 'band', 'album'],
-            'food': ['food', 'fruit', 'vegetable', 'drink', 'cook', 'eat', 'meal', 'recipe', 'cuisine', 'dish', 'restaurant', 'coffee', 'tea', 'wine', 'cheese'],
-            'animals': ['animal', 'cat', 'dog', 'bird', 'fish', 'mammal', 'reptile', 'insect', 'species', 'wildlife', 'ocean', 'forest', 'pet', 'horse', 'elephant'],
-            'technology': ['computer', 'phone', 'internet', 'software', 'app', 'digital', 'robot', 'network', 'device', 'electronic', 'program', 'code', 'data', 'web']
+            'science': ['science', 'physics', 'chemistry', 'biology', 'atom', 'molecule', 'space', 'planet', 'star'],
+            'geography': ['country', 'river', 'mountain', 'ocean', 'city', 'capital', 'desert', 'island'],
+            'history': ['history', 'war', 'king', 'queen', 'president', 'century', 'ancient', 'empire'],
+            'sports': ['sport', 'game', 'football', 'soccer', 'basketball', 'tennis', 'olympic'],
+            'culture': ['movie', 'film', 'book', 'song', 'artist', 'painting', 'music', 'theater'],
+            'food': ['food', 'fruit', 'vegetable', 'drink', 'cook', 'eat', 'meal', 'recipe'],
+            'animals': ['animal', 'cat', 'dog', 'bird', 'fish', 'mammal', 'reptile', 'insect'],
+            'technology': ['computer', 'phone', 'internet', 'software', 'app', 'digital', 'robot']
         }
         for cat, words in keywords.items():
             if any(word in text_lower for word in words):
@@ -164,10 +135,10 @@ class QuestionDatabase:
                 ("Луна больше Земли", False),
                 ("Вирусы — это живые организмы", False),
                 ("Свет движется быстрее звука", True),
-                ("У человека пять органов чувств", True),
                 ("Растения дышат углекислым газом", True),
                 ("Железо легче алюминия", False),
-                ("Солнце вращается вокруг Земли", False),
+                ("Кислород — самый распространённый элемент на Земле", True),
+                ("Золото ржавеет", False),
             ],
             'geography': [
                 ("Ватикан — самая маленькая страна", True),
@@ -176,7 +147,6 @@ class QuestionDatabase:
                 ("Австралия — это самый большой остров", True),
                 ("Гренландия — независимая страна", False),
                 ("Китай граничит с 14 странами", True),
-                ("Монако больше Сан-Марино", False),
                 ("В мире 7 континентов", True),
                 ("Россия омывается 12 морями", True),
                 ("Амазонка — самая длинная река", False),
@@ -185,6 +155,7 @@ class QuestionDatabase:
                 ("Эверест — самая высокая гора", True),
                 ("Япония состоит из 4 крупных островов", True),
                 ("Африка — самый большой континент", False),
+                ("Мёртвое море — это озеро", True),
             ],
             'history': [
                 ("Пётр I основал Санкт-Петербург", True),
@@ -197,11 +168,11 @@ class QuestionDatabase:
                 ("СССР распался в 1991 году", True),
                 ("Клеопатра была египтянкой", False),
                 ("Первая мировая война началась в 1914 году", True),
-                ("Древний Рим был основан в 753 году до н.э.", True),
                 ("Чингисхан основал Монгольскую империю", True),
                 ("Берлинская стена пала в 1989 году", True),
                 ("Александр Македонский умер в 33 года", True),
                 ("Великая французская революция была в 1789 году", True),
+                ("Древняя Греция существовала до Древнего Рима", True),
             ],
             'sports': [
                 ("Футбол — самый популярный спорт", True),
@@ -214,8 +185,8 @@ class QuestionDatabase:
                 ("Марафонская дистанция — 42 км 195 м", True),
                 ("В футболе 11 игроков в команде", True),
                 ("Баскетбол изобрели в Канаде", True),
-                ("В боксе 10 раундов по 3 минуты", True),
-                ("Теннисный корт меньше баскетбольной площадки", False),
+                ("В боксе 12 раундов", True),
+                ("Теннисный корт больше баскетбольной площадки", True),
                 ("Формула-1 проводится с 1950 года", True),
                 ("В регби мяч круглый", False),
                 ("Плавание входит в олимпийскую программу", True),
@@ -234,8 +205,8 @@ class QuestionDatabase:
                 ("«Титаник» получил 11 Оскаров", True),
                 ("Микки Маус был создан в 1928 году", True),
                 ("Шерлок Холмс — реальный человек", False),
-                ("Первый цветной фильм вышел в 1935 году", True),
                 ("Эйфелева башня была временным сооружением", True),
+                ("Группа Queen основана в Лондоне", True),
             ],
             'food': [
                 ("Шоколад ядовит для собак", True),
@@ -258,13 +229,13 @@ class QuestionDatabase:
                 ("Панды едят только бамбук", True),
                 ("Страусы прячут голову в песок", False),
                 ("Дельфины спят с одним открытым глазом", True),
-                ("Слоны — единственные животные, которые не могут прыгать", True),
-                ("У жирафа 7 шейных позвонков (как у человека)", True),
+                ("Слоны не могут прыгать", True),
+                ("У жирафа 7 шейных позвонков", True),
                 ("Крокодилы могут высовывать язык", False),
                 ("Пчёлы умирают после укуса", True),
                 ("Ленивцы спят до 20 часов в сутки", True),
                 ("Киты — это рыбы", False),
-                ("Летучие мыши — единственные летающие млекопитающие", True),
+                ("Летучие мыши — млекопитающие", True),
                 ("У пауков 8 ног", True),
                 ("Пингвины живут только в Антарктиде", False),
                 ("Хамелеоны меняют цвет для маскировки", True),
@@ -285,25 +256,25 @@ class QuestionDatabase:
                 ("Электронную почту изобрели до интернета", True),
                 ("JavaScript и Java — это одно и то же", False),
                 ("Linux создал Линус Торвальдс", True),
-                ("Первый сайт в интернете всё ещё работает", True),
-                ("Bluetooth 5.0 имеет радиус действия до 240 метров", True),
+                ("Первый сайт всё ещё работает", True),
+                ("Bluetooth 5.0 работает до 240 метров", True),
             ],
             'mixed': [
                 ("Самый большой океан — Тихий", True),
                 ("Человек использует только 10% мозга", False),
                 ("Золото добывают только в шахтах", False),
                 ("Молния бьёт только в высокие объекты", False),
-                ("Монета падает орлом в 50% случаев", True),
                 ("В сутках 24 часа", True),
-                ("Глаз человека видит 10 миллионов цветов", True),
                 ("Хамелеоны меняют цвет только для маскировки", False),
                 ("В радуге 7 цветов", True),
                 ("Стекло — это жидкость", False),
-                ("Гора Эверест растёт на 4 мм в год", True),
-                ("Вода составляет 70% массы тела человека", True),
+                ("Эверест растёт на 4 мм в год", True),
+                ("Вода составляет 70% массы тела", True),
                 ("Ногти растут быстрее летом", True),
-                ("Звук в воде распространяется быстрее, чем в воздухе", True),
-                ("Луна вызывает приливы и отливы", True),
+                ("Звук в воде быстрее, чем в воздухе", True),
+                ("Луна вызывает приливы", True),
+                ("Пингвины умеют летать", False),
+                ("Глаз человека видит 10 миллионов цветов", True),
             ]
         }
         
@@ -323,21 +294,13 @@ class QuestionDatabase:
         """Обновляет базу вопросов"""
         print("🔄 Обновление базы вопросов...")
         
-        all_questions = {'ru': [], 'en': []}
+        all_questions = {'ru': self.questions['ru'], 'en': []}
         
-        # Загружаем английские вопросы
         for cat in CATEGORIES.keys():
             if cat != 'mixed':
                 cat_questions = self.fetch_from_opentdb(cat, 30)
                 all_questions['en'].extend(cat_questions)
         
-        trivia_questions = self.fetch_from_trivia_api(50)
-        all_questions['en'].extend(trivia_questions)
-        
-        # Сохраняем русские вопросы
-        all_questions['ru'] = self.questions['ru']
-        
-        # Удаляем дубликаты
         for lang in ['ru', 'en']:
             seen = set()
             unique = []
@@ -376,7 +339,7 @@ class QuestionManager:
         self.max_history = max_history
     
     def _normalize_question(self, text):
-        """Нормализует текст вопроса, убирая незначащие слова"""
+        """Нормализует текст вопроса"""
         text = text.lower().strip()
         text = re.sub(r'[^\w\s]', '', text)
         text = ' '.join(text.split())
@@ -410,12 +373,9 @@ class QuestionManager:
             return None, None, None
         
         asked_hashes = set(self.user_history.get(user_id, []))
-        
-        # Перемешиваем для случайности
         shuffled = questions_list.copy()
         random.shuffle(shuffled)
         
-        # Ищем неповторяющийся вопрос
         for q in shuffled:
             normalized = self._normalize_question(q['text'])
             q_hash = self._create_question_hash(normalized)
@@ -424,11 +384,7 @@ class QuestionManager:
                 self._add_to_history(user_id, q_hash)
                 return q['text'], q['answer'], q['category']
         
-        # Если все вопросы исчерпаны, очищаем историю
-        print(f"⚠️ Все вопросы исчерпаны для пользователя {user_id}, сбрасываем историю")
         self.clear_history(user_id)
-        
-        # Выбираем случайный вопрос
         selected = random.choice(shuffled)
         normalized = self._normalize_question(selected['text'])
         q_hash = self._create_question_hash(normalized)
@@ -440,9 +396,7 @@ class QuestionManager:
         """Добавляет вопрос в историю"""
         if user_id not in self.user_history:
             self.user_history[user_id] = []
-        
         self.user_history[user_id].append(question_hash)
-        
         while len(self.user_history[user_id]) > self.max_history:
             self.user_history[user_id].pop(0)
     
@@ -555,14 +509,68 @@ class Database:
         self.conn.commit()
     
     def get_or_create_user(self, user_id, username=None, first_name=None, last_name=None):
+        """Получает или создаёт пользователя с актуальными данными"""
         self.cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
         user = self.cursor.fetchone()
+        
         if not user:
-            self.cursor.execute('INSERT INTO users (user_id, username, first_name, last_name, selected_category) VALUES (?, ?, ?, ?, ?)',
-                              (user_id, username, first_name, last_name, 'mixed'))
+            self.cursor.execute('''
+                INSERT INTO users (user_id, username, first_name, last_name, selected_category) 
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, username, first_name, last_name, 'mixed'))
             self.conn.commit()
-            return {'user_id': user_id, 'language': 'ru', 'selected_category': 'mixed', 'best_score': 0, 'games_played': 0, 'total_score': 0}
-        return {'user_id': user[0], 'language': user[4], 'selected_category': user[5], 'best_score': user[6], 'games_played': user[7], 'total_score': user[8]}
+            return {
+                'user_id': user_id, 
+                'username': username,
+                'first_name': first_name,
+                'last_name': last_name,
+                'language': 'ru', 
+                'selected_category': 'mixed', 
+                'best_score': 0, 
+                'games_played': 0, 
+                'total_score': 0
+            }
+        else:
+            # Обновляем данные, если они изменились
+            if (username and username != user[1]) or \
+               (first_name and first_name != user[2]) or \
+               (last_name and last_name != user[3]):
+                self.cursor.execute('''
+                    UPDATE users SET username = ?, first_name = ?, last_name = ?
+                    WHERE user_id = ?
+                ''', (username, first_name, last_name, user_id))
+                self.conn.commit()
+            
+            return {
+                'user_id': user[0], 
+                'username': username or user[1],
+                'first_name': first_name or user[2],
+                'last_name': last_name or user[3],
+                'language': user[4], 
+                'selected_category': user[5], 
+                'best_score': user[6], 
+                'games_played': user[7], 
+                'total_score': user[8]
+            }
+    
+    def get_display_name(self, user_id):
+        """Получает отображаемое имя пользователя"""
+        self.cursor.execute('SELECT username, first_name, last_name FROM users WHERE user_id = ?', (user_id,))
+        user = self.cursor.fetchone()
+        
+        if not user:
+            return f"Игрок"
+        
+        username, first_name, last_name = user
+        
+        if username:
+            return f"@{username}"
+        elif first_name and last_name:
+            return f"{first_name} {last_name}"
+        elif first_name:
+            return first_name
+        else:
+            return "Игрок"
     
     def set_category(self, user_id, category):
         self.cursor.execute('UPDATE users SET selected_category = ? WHERE user_id = ?', (category, user_id))
@@ -602,7 +610,7 @@ class Database:
             record_holder = group[6]
             if score > group[5]:
                 new_record = score
-                record_holder = username or str(user_id)
+                record_holder = username or self.get_display_name(user_id)
             self.cursor.execute('''UPDATE group_stats SET 
                 total_players = ?, total_games = total_games + 1, 
                 total_points = total_points + ?, record_score = ?, 
@@ -612,7 +620,7 @@ class Database:
             self.cursor.execute('''INSERT INTO group_stats 
                 (group_id, total_players, total_games, total_points, record_score, record_holder) 
                 VALUES (?, 1, 1, ?, ?, ?)''',
-                (group_id, score, score, username or str(user_id)))
+                (group_id, score, score, username or self.get_display_name(user_id)))
         self.conn.commit()
     
     def get_group_leaderboard(self, group_id, limit=10):
@@ -622,7 +630,7 @@ class Database:
         return self.cursor.fetchall()
     
     def get_leaderboard(self, limit=10):
-        self.cursor.execute('''SELECT username, first_name, best_score, games_played, total_score 
+        self.cursor.execute('''SELECT user_id, username, first_name, last_name, best_score, games_played, total_score 
                              FROM users WHERE games_played > 0 
                              ORDER BY best_score DESC LIMIT ?''', (limit,))
         return self.cursor.fetchall()
@@ -649,6 +657,10 @@ def get_text(user_id, key, *args):
     if args:
         return text.format(*args)
     return text
+
+def get_user_display_name(user_id):
+    """Получает красивое имя пользователя"""
+    return db.get_display_name(user_id)
 
 # ========== ХРАНЕНИЕ СОСТОЯНИЙ ИГР ==========
 user_games = {}
@@ -803,16 +815,29 @@ async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = get_text(user_id, 'leaderboard_title') + get_text(user_id, 'no_players')
     else:
         text = get_text(user_id, 'leaderboard_title')
-        for i, (username, first_name, best_score, games_played, total_score) in enumerate(top_players, 1):
+        for i, (uid, username, first_name, last_name, best_score, games_played, total_score) in enumerate(top_players, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-            name = first_name or username or "Игрок"
+            
+            # Формируем красивое имя
+            if username:
+                name = f"@{username}"
+            elif first_name:
+                name = first_name
+                if last_name:
+                    name += f" {last_name}"
+            else:
+                name = "Игрок"
+                
             if len(name) > 20:
                 name = name[:17] + "..."
+                
             text += f"{medal} *{name}*\n   🏆 {best_score} очков | 🎮 {games_played} игр\n\n"
     
     user_rank = db.get_user_rank(user_id)
     user_data = db.get_or_create_user(user_id)
-    text += f"\n📊 *Твоё место:* #{user_rank} | 🏅 *{user_data['best_score']}* очков"
+    current_name = get_user_display_name(user_id)
+    
+    text += f"\n📊 *{current_name}* — место #{user_rank} | 🏅 *{user_data['best_score']}* очков"
     
     keyboard = [[InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -823,24 +848,43 @@ async def show_group_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
+    
     if chat_id > 0:
         await query.edit_message_text("❌ Эта команда только для групп!")
         return
+        
     group_top = db.get_group_leaderboard(chat_id, 10)
     text = get_text(user_id, 'group_leaderboard_title')
+    
     if not group_top:
         text += get_text(user_id, 'no_players')
     else:
         for i, (uid, best_score, games_played, total_points) in enumerate(group_top, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-            try:
-                user = await context.bot.get_chat(uid)
-                name = user.first_name or str(uid)
-            except:
-                name = str(uid)
-            if len(name) > 20:
-                name = name[:17] + "..."
-            text += f"{medal} *{name}*\n   🏆 {best_score} очков | 🎮 {games_played} игр\n\n"
+            
+            # Получаем имя из базы
+            display_name = get_user_display_name(uid)
+            
+            # Если имя не найдено, пробуем получить из Telegram
+            if display_name == "Игрок":
+                try:
+                    chat_member = await context.bot.get_chat_member(chat_id, uid)
+                    user = chat_member.user
+                    db.get_or_create_user(uid, user.username, user.first_name, user.last_name)
+                    
+                    if user.username:
+                        display_name = f"@{user.username}"
+                    elif user.first_name:
+                        display_name = user.first_name
+                        if user.last_name:
+                            display_name += f" {user.last_name}"
+                except:
+                    pass
+            
+            if len(display_name) > 20:
+                display_name = display_name[:17] + "..."
+                
+            text += f"{medal} *{display_name}*\n   🏆 {best_score} очков | 🎮 {games_played} игр\n\n"
     
     keyboard = [[InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -910,16 +954,18 @@ async def handle_back_during_game(update: Update, context: ContextTypes.DEFAULT_
         
         if chat_id < 0:
             user = update.effective_user
-            db.update_group_score(chat_id, user_id, current_score, user.first_name)
+            db.update_group_score(chat_id, user_id, current_score, get_user_display_name(user_id))
         
         del user_games[user_id]
         
         user_data = db.get_or_create_user(user_id)
         user_rank = db.get_user_rank(user_id)
+        display_name = get_user_display_name(user_id)
         
         if lang == 'ru':
             save_message = (
                 f"💾 *Игра прервана!*\n\n"
+                f"Игрок: *{display_name}*\n"
                 f"📊 Набрано очков: *{current_score}*\n"
                 f"🏅 Лучший результат: *{user_data['best_score']}*\n"
                 f"📈 Место в топе: *#{user_rank}*\n"
@@ -929,6 +975,7 @@ async def handle_back_during_game(update: Update, context: ContextTypes.DEFAULT_
         else:
             save_message = (
                 f"💾 *Game interrupted!*\n\n"
+                f"Player: *{display_name}*\n"
                 f"📊 Points scored: *{current_score}*\n"
                 f"🏅 Best score: *{user_data['best_score']}*\n"
                 f"📈 Rank: *#{user_rank}*\n"
@@ -949,6 +996,11 @@ async def new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
+    
+    # Обновляем данные пользователя
+    user = update.effective_user
+    db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
+    
     user_data = db.get_or_create_user(user_id)
     lang = user_data['language']
     category = user_data['selected_category']
@@ -960,8 +1012,7 @@ async def new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if old_score > 0:
             db.update_score(user_id, old_score)
             if chat_id < 0:
-                user = update.effective_user
-                db.update_group_score(chat_id, user_id, old_score, user.first_name)
+                db.update_group_score(chat_id, user_id, old_score, get_user_display_name(user_id))
     
     await cancel_timer(user_id)
     
@@ -1002,6 +1053,11 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
+    
+    # Обновляем данные пользователя
+    user = update.effective_user
+    db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
+    
     user_data = db.get_or_create_user(user_id)
     lang = user_data['language']
     category = user_data['selected_category']
@@ -1016,6 +1072,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     correct_answer = game['correct_answer']
     current_score = game['score']
+    display_name = get_user_display_name(user_id)
     
     if is_yes == correct_answer:
         current_score += 1
@@ -1024,12 +1081,11 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not question_text:
             db.update_score(user_id, current_score)
             if chat_id < 0:
-                user = update.effective_user
-                db.update_group_score(chat_id, user_id, current_score, user.first_name)
+                db.update_group_score(chat_id, user_id, current_score, display_name)
             del user_games[user_id]
             
             await query.edit_message_text(
-                f"🎉 *Все вопросы пройдены!*\n\n📊 Финальный счёт: *{current_score}* очков\n\n✅ Результат сохранён!",
+                f"🎉 *Все вопросы пройдены!*\n\nИгрок: *{display_name}*\n📊 Финальный счёт: *{current_score}* очков\n\n✅ Результат сохранён!",
                 parse_mode="Markdown"
             )
             return
@@ -1063,8 +1119,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         correct_word = "ДА" if correct_answer else "НЕТ" if lang == 'ru' else "YES" if correct_answer else "NO"
         is_record = db.update_score(user_id, current_score)
         if chat_id < 0:
-            user = update.effective_user
-            db.update_group_score(chat_id, user_id, current_score, user.first_name)
+            db.update_group_score(chat_id, user_id, current_score, display_name)
         user_rank = db.get_user_rank(user_id)
         user_data_full = db.get_or_create_user(user_id)
         del user_games[user_id]
@@ -1077,6 +1132,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         message = get_text(user_id, 'game_over', correct_word, current_score, user_data_full['best_score'])
+        message = f"Игрок: *{display_name}*\n\n" + message
         if is_record and current_score > 0:
             message += "\n\n🎉 *НОВЫЙ РЕКОРД!* 🎉"
         message += f"\n\n📊 *Твоё место в общем топе: #{user_rank}*"
@@ -1095,6 +1151,10 @@ async def welcome_new_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
+    
+    user = update.effective_user
+    db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
+    
     user_data = db.get_or_create_user(user_id)
     lang = user_data['language']
     category = user_data['selected_category']
@@ -1105,8 +1165,7 @@ async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if old_score > 0:
             db.update_score(user_id, old_score)
             if chat_id < 0:
-                user = update.effective_user
-                db.update_group_score(chat_id, user_id, old_score, user.first_name)
+                db.update_group_score(chat_id, user_id, old_score, get_user_display_name(user_id))
     
     await cancel_timer(user_id)
     
@@ -1157,10 +1216,12 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     cat_name = CATEGORIES.get(category, CATEGORIES['mixed'])[f'name_{lang}']
     cat_emoji = CATEGORIES.get(category, CATEGORIES['mixed'])['emoji']
+    display_name = get_user_display_name(user_id)
     
     if lang == 'ru':
         text = (
             f"📊 *СТАТИСТИКА ВОПРОСОВ*\n\n"
+            f"Игрок: *{display_name}*\n\n"
             f"📝 Всего задано: *{stats['total_asked']}*\n"
             f"🔢 Уникальных: *{stats['unique']}*\n"
             f"📋 Осталось мест: *{stats['remaining']}/{question_manager.max_history}*\n\n"
@@ -1173,6 +1234,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         text = (
             f"📊 *QUESTION STATISTICS*\n\n"
+            f"Player: *{display_name}*\n\n"
             f"📝 Total asked: *{stats['total_asked']}*\n"
             f"🔢 Unique: *{stats['unique']}*\n"
             f"📋 Remaining: *{stats['remaining']}/{question_manager.max_history}*\n\n"
@@ -1184,6 +1246,28 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     await update.message.reply_text(text, parse_mode="Markdown")
+
+async def cmd_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает и обновляет профиль пользователя"""
+    user = update.effective_user
+    
+    db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
+    
+    display_name = get_user_display_name(user.id)
+    user_data = db.get_or_create_user(user.id)
+    
+    await update.message.reply_text(
+        f"👤 *ТВОЙ ПРОФИЛЬ*\n\n"
+        f"Отображаемое имя: *{display_name}*\n"
+        f"Username: @{user.username if user.username else 'не указан'}\n"
+        f"Имя: {user.first_name if user.first_name else 'не указано'}\n\n"
+        f"🏅 Лучший результат: *{user_data['best_score']}* очков\n"
+        f"🎮 Всего игр: *{user_data['games_played']}*\n"
+        f"📊 Всего очков: *{user_data['total_score']}*\n"
+        f"🌐 Язык: {'🇷🇺 Русский' if user_data['language'] == 'ru' else '🇬🇧 English'}\n\n"
+        f"✅ Профиль обновлён!",
+        parse_mode="Markdown"
+    )
 
 # ========== ЗАПУСК ==========
 def main():
@@ -1200,6 +1284,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("play", cmd_play))
     app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("profile", cmd_profile))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_bot))
     
     # Callback handlers
@@ -1234,6 +1319,8 @@ def main():
     print("✅ /start - Главное меню")
     print("✅ /play - Быстрый старт игры")
     print("✅ /stats - Статистика вопросов")
+    print("✅ /profile - Профиль игрока")
+    print("👤 Имена отображаются из Telegram!")
     print("💾 Результат сохраняется при выходе из игры!")
     print("=" * 60)
     
