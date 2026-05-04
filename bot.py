@@ -19,7 +19,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 # ========== НАСТРОЙКИ ==========
 QUESTION_TIME_LIMIT = 30
-MAX_QUESTION_HISTORY = 100  # Увеличено до 100
+MAX_QUESTION_HISTORY = 100
 DAILY_UPDATE_HOUR = 3
 
 # ========== КАТЕГОРИИ ВОПРОСОВ ==========
@@ -34,29 +34,6 @@ CATEGORIES = {
     'technology': {'emoji': '💻', 'name_ru': 'Технологии', 'name_en': 'Technology'},
     'mixed': {'emoji': '🎲', 'name_ru': 'Смешанная', 'name_en': 'Mixed'}
 }
-
-# ========== КЭШ КАРТИНОК ==========
-class ImageCache:
-    def __init__(self):
-        self.cache = {}
-        self.last_update = None
-    
-    def get_image_url(self, category, question_hash):
-        """Получает URL картинки для категории"""
-        image_apis = {
-            'science': f"https://picsum.photos/id/1/512/384",
-            'geography': f"https://picsum.photos/id/15/512/384",
-            'history': f"https://picsum.photos/id/20/512/384",
-            'sports': f"https://picsum.photos/id/28/512/384",
-            'culture': f"https://picsum.photos/id/30/512/384",
-            'food': f"https://picsum.photos/id/108/512/384",
-            'animals': f"https://picsum.photos/id/100/512/384",
-            'technology': f"https://picsum.photos/id/0/512/384",
-            'mixed': f"https://picsum.photos/id/{int(question_hash, 16) % 100}/512/384"
-        }
-        return image_apis.get(category, image_apis['mixed'])
-
-image_cache = ImageCache()
 
 # ========== БАЗА ДАННЫХ ВОПРОСОВ ==========
 class QuestionDatabase:
@@ -77,6 +54,9 @@ class QuestionDatabase:
             except Exception as e:
                 print(f"⚠️ Ошибка загрузки кэша: {e}")
                 self.load_builtin_questions_all()
+        else:
+            self.load_builtin_questions_all()
+            self.save_to_storage()
     
     def save_to_storage(self):
         """Сохраняет вопросы в файл кэша"""
@@ -155,14 +135,14 @@ class QuestionDatabase:
         """Определяет категорию по ключевым словам"""
         text_lower = text.lower()
         keywords = {
-            'science': ['science', 'physics', 'chemistry', 'biology', 'atom', 'molecule', 'space', 'planet', 'star', 'galaxy'],
-            'geography': ['country', 'river', 'mountain', 'ocean', 'city', 'capital', 'desert', 'island', 'continent'],
-            'history': ['history', 'war', 'king', 'queen', 'president', 'century', 'ancient', 'empire', 'revolution'],
-            'sports': ['sport', 'game', 'football', 'soccer', 'basketball', 'tennis', 'olympic', 'championship'],
-            'culture': ['movie', 'film', 'book', 'song', 'artist', 'painting', 'music', 'theater', 'novel'],
-            'food': ['food', 'fruit', 'vegetable', 'drink', 'cook', 'eat', 'meal', 'recipe', 'cuisine'],
-            'animals': ['animal', 'cat', 'dog', 'bird', 'fish', 'mammal', 'reptile', 'insect', 'species'],
-            'technology': ['computer', 'phone', 'internet', 'software', 'app', 'digital', 'robot', 'network']
+            'science': ['science', 'physics', 'chemistry', 'biology', 'atom', 'molecule', 'space', 'planet', 'star', 'galaxy', 'earth', 'sun', 'moon', 'solar', 'gravity', 'element', 'oxygen', 'hydrogen', 'carbon'],
+            'geography': ['country', 'river', 'mountain', 'ocean', 'city', 'capital', 'desert', 'island', 'continent', 'sea', 'lake', 'forest', 'volcano', 'earthquake'],
+            'history': ['history', 'war', 'king', 'queen', 'president', 'century', 'ancient', 'empire', 'revolution', 'battle', 'civilization', 'dynasty', 'emperor'],
+            'sports': ['sport', 'game', 'football', 'soccer', 'basketball', 'tennis', 'olympic', 'championship', 'player', 'team', 'goal', 'match', 'race'],
+            'culture': ['movie', 'film', 'book', 'song', 'artist', 'painting', 'music', 'theater', 'novel', 'poem', 'actor', 'actress', 'director', 'band', 'album'],
+            'food': ['food', 'fruit', 'vegetable', 'drink', 'cook', 'eat', 'meal', 'recipe', 'cuisine', 'dish', 'restaurant', 'coffee', 'tea', 'wine', 'cheese'],
+            'animals': ['animal', 'cat', 'dog', 'bird', 'fish', 'mammal', 'reptile', 'insect', 'species', 'wildlife', 'ocean', 'forest', 'pet', 'horse', 'elephant'],
+            'technology': ['computer', 'phone', 'internet', 'software', 'app', 'digital', 'robot', 'network', 'device', 'electronic', 'program', 'code', 'data', 'web']
         }
         for cat, words in keywords.items():
             if any(word in text_lower for word in words):
@@ -183,6 +163,11 @@ class QuestionDatabase:
                 ("У человека 206 костей", True),
                 ("Луна больше Земли", False),
                 ("Вирусы — это живые организмы", False),
+                ("Свет движется быстрее звука", True),
+                ("У человека пять органов чувств", True),
+                ("Растения дышат углекислым газом", True),
+                ("Железо легче алюминия", False),
+                ("Солнце вращается вокруг Земли", False),
             ],
             'geography': [
                 ("Ватикан — самая маленькая страна", True),
@@ -193,6 +178,13 @@ class QuestionDatabase:
                 ("Китай граничит с 14 странами", True),
                 ("Монако больше Сан-Марино", False),
                 ("В мире 7 континентов", True),
+                ("Россия омывается 12 морями", True),
+                ("Амазонка — самая длинная река", False),
+                ("Сахара — самая большая пустыня", False),
+                ("Байкал — самое глубокое озеро", True),
+                ("Эверест — самая высокая гора", True),
+                ("Япония состоит из 4 крупных островов", True),
+                ("Африка — самый большой континент", False),
             ],
             'history': [
                 ("Пётр I основал Санкт-Петербург", True),
@@ -203,6 +195,13 @@ class QuestionDatabase:
                 ("Колумб открыл Америку в 1492 году", True),
                 ("Викинги носили рогатые шлемы", False),
                 ("СССР распался в 1991 году", True),
+                ("Клеопатра была египтянкой", False),
+                ("Первая мировая война началась в 1914 году", True),
+                ("Древний Рим был основан в 753 году до н.э.", True),
+                ("Чингисхан основал Монгольскую империю", True),
+                ("Берлинская стена пала в 1989 году", True),
+                ("Александр Македонский умер в 33 года", True),
+                ("Великая французская революция была в 1789 году", True),
             ],
             'sports': [
                 ("Футбол — самый популярный спорт", True),
@@ -213,6 +212,13 @@ class QuestionDatabase:
                 ("Усэйн Болт — пловец", False),
                 ("В шахматах белые ходят первыми", True),
                 ("Марафонская дистанция — 42 км 195 м", True),
+                ("В футболе 11 игроков в команде", True),
+                ("Баскетбол изобрели в Канаде", True),
+                ("В боксе 10 раундов по 3 минуты", True),
+                ("Теннисный корт меньше баскетбольной площадки", False),
+                ("Формула-1 проводится с 1950 года", True),
+                ("В регби мяч круглый", False),
+                ("Плавание входит в олимпийскую программу", True),
             ],
             'culture': [
                 ("Мона Лиза находится в Лувре", True),
@@ -223,6 +229,13 @@ class QuestionDatabase:
                 ("Битлз — британская группа", True),
                 ("Гарри Поттер учился в Хогвартсе", True),
                 ("Моцарт был глухим", False),
+                ("Да Винчи нарисовал «Мону Лизу»", True),
+                ("Бетховен написал 9 симфоний", True),
+                ("«Титаник» получил 11 Оскаров", True),
+                ("Микки Маус был создан в 1928 году", True),
+                ("Шерлок Холмс — реальный человек", False),
+                ("Первый цветной фильм вышел в 1935 году", True),
+                ("Эйфелева башня была временным сооружением", True),
             ],
             'food': [
                 ("Шоколад ядовит для собак", True),
@@ -233,6 +246,13 @@ class QuestionDatabase:
                 ("Арахис — это орех", False),
                 ("Клубника — это ягода", True),
                 ("Авокадо — это фрукт", True),
+                ("Кофе делают из бобов", True),
+                ("Киви — это птица и фрукт", True),
+                ("Рис — это зерновая культура", True),
+                ("Чай был изобретён в Китае", True),
+                ("Пицца родом из Италии", True),
+                ("Суши — это японское блюдо из сырой рыбы", False),
+                ("Какао растёт на деревьях", True),
             ],
             'animals': [
                 ("Панды едят только бамбук", True),
@@ -243,22 +263,47 @@ class QuestionDatabase:
                 ("Крокодилы могут высовывать язык", False),
                 ("Пчёлы умирают после укуса", True),
                 ("Ленивцы спят до 20 часов в сутки", True),
+                ("Киты — это рыбы", False),
+                ("Летучие мыши — единственные летающие млекопитающие", True),
+                ("У пауков 8 ног", True),
+                ("Пингвины живут только в Антарктиде", False),
+                ("Хамелеоны меняют цвет для маскировки", True),
+                ("У собаки 42 зуба", True),
+                ("Коалы — это медведи", False),
             ],
             'technology': [
                 ("Компьютерная мышь изобретена в 1968 году", True),
-                ("Wi-Fi — это Wireless Fidelity", False),
+                ("Wi-Fi расшифровывается как Wireless Fidelity", False),
                 ("Первый iPhone вышел в 2007 году", True),
                 ("Bluetooth назван в честь короля викингов", True),
-                ("CAPTCHA расшифровывается как Completely Automated Public Turing test", True),
-                ("QR-код изобрели в Японии", True),
                 ("Билл Гейтс основал Apple", False),
+                ("QR-код изобрели в Японии", True),
                 ("YouTube был создан в 2005 году", True),
+                ("Google был основан в 1998 году", True),
+                ("Первый компьютер весил более 27 тонн", True),
+                ("Facebook был создан в Гарварде", True),
+                ("Электронную почту изобрели до интернета", True),
+                ("JavaScript и Java — это одно и то же", False),
+                ("Linux создал Линус Торвальдс", True),
+                ("Первый сайт в интернете всё ещё работает", True),
+                ("Bluetooth 5.0 имеет радиус действия до 240 метров", True),
             ],
             'mixed': [
                 ("Самый большой океан — Тихий", True),
                 ("Человек использует только 10% мозга", False),
                 ("Золото добывают только в шахтах", False),
                 ("Молния бьёт только в высокие объекты", False),
+                ("Монета падает орлом в 50% случаев", True),
+                ("В сутках 24 часа", True),
+                ("Глаз человека видит 10 миллионов цветов", True),
+                ("Хамелеоны меняют цвет только для маскировки", False),
+                ("В радуге 7 цветов", True),
+                ("Стекло — это жидкость", False),
+                ("Гора Эверест растёт на 4 мм в год", True),
+                ("Вода составляет 70% массы тела человека", True),
+                ("Ногти растут быстрее летом", True),
+                ("Звук в воде распространяется быстрее, чем в воздухе", True),
+                ("Луна вызывает приливы и отливы", True),
             ]
         }
         
@@ -272,8 +317,7 @@ class QuestionDatabase:
                 })
         
         self.questions['ru'] = questions
-        self.questions['en'] = []
-        print(f"✅ Загружено {len(questions)} встроенных вопросов")
+        print(f"✅ Загружено {len(questions)} встроенных русских вопросов")
     
     def update_questions(self):
         """Обновляет базу вопросов"""
@@ -290,9 +334,7 @@ class QuestionDatabase:
         trivia_questions = self.fetch_from_trivia_api(50)
         all_questions['en'].extend(trivia_questions)
         
-        # Загружаем русские вопросы
-        if not self.questions['ru']:
-            self.load_builtin_questions_all()
+        # Сохраняем русские вопросы
         all_questions['ru'] = self.questions['ru']
         
         # Удаляем дубликаты
@@ -313,8 +355,11 @@ class QuestionDatabase:
     
     def get_questions_by_category(self, language, category=None):
         """Возвращает вопросы по категории"""
-        if not self.questions[language]:
-            self.load_builtin_questions_all()
+        if not self.questions.get(language):
+            if language == 'ru':
+                self.load_builtin_questions_all()
+            else:
+                return []
         if category and category != 'mixed':
             return [q for q in self.questions[language] if q['category'] == category]
         return self.questions[language]
@@ -330,80 +375,79 @@ class QuestionManager:
         self.user_history = {}
         self.max_history = max_history
     
+    def _normalize_question(self, text):
+        """Нормализует текст вопроса, убирая незначащие слова"""
+        text = text.lower().strip()
+        text = re.sub(r'[^\w\s]', '', text)
+        text = ' '.join(text.split())
+        
+        stop_words = {
+            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'has', 'have', 'had',
+            'does', 'do', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+            'can', 'shall', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from',
+            'верно', 'ли', 'что', 'это', 'в', 'на', 'с', 'по', 'к', 'из', 'от', 'для',
+            'как', 'не', 'он', 'она', 'оно', 'они', 'был', 'была', 'было', 'были',
+            'есть', 'будет', 'будут', 'может', 'могут', 'или', 'и', 'а', 'но'
+        }
+        
+        words = text.split()
+        meaningful_words = [w for w in words if w not in stop_words and len(w) > 1]
+        
+        if not meaningful_words:
+            meaningful_words = words
+        
+        meaningful_words.sort()
+        return ' '.join(meaningful_words)
+    
+    def _create_question_hash(self, normalized_text):
+        """Создает хеш вопроса"""
+        return hashlib.md5(normalized_text.encode()).hexdigest()
+    
     def get_unique_question(self, user_id, language, category=None):
         """Возвращает уникальный вопрос"""
         questions_list = question_db.get_questions_by_category(language, category)
         if not questions_list:
             return None, None, None
         
-        history = set(self.user_history.get(user_id, []))
+        asked_hashes = set(self.user_history.get(user_id, []))
         
-        # Фильтруем вопросы
-        available_questions = []
-        for q in questions_list:
-            question_key = self._get_question_key(q['text'], language)
-            if question_key not in history and not self._is_similar_to_history(question_key, history):
-                available_questions.append(q)
+        # Перемешиваем для случайности
+        shuffled = questions_list.copy()
+        random.shuffle(shuffled)
         
-        # Если мало вопросов, очищаем часть истории
-        if len(available_questions) < 10 and len(questions_list) > len(history):
-            self._clean_old_entries(user_id, keep_last=50)
-            history = set(self.user_history.get(user_id, []))
-            available_questions = [q for q in questions_list 
-                                 if self._get_question_key(q['text'], language) not in history]
+        # Ищем неповторяющийся вопрос
+        for q in shuffled:
+            normalized = self._normalize_question(q['text'])
+            q_hash = self._create_question_hash(normalized)
+            
+            if q_hash not in asked_hashes:
+                self._add_to_history(user_id, q_hash)
+                return q['text'], q['answer'], q['category']
         
-        # Если всё равно нет доступных, сбрасываем историю
-        if not available_questions:
-            self.clear_history(user_id)
-            history = set()
-            available_questions = questions_list
+        # Если все вопросы исчерпаны, очищаем историю
+        print(f"⚠️ Все вопросы исчерпаны для пользователя {user_id}, сбрасываем историю")
+        self.clear_history(user_id)
         
-        selected = random.choice(available_questions)
-        question_key = self._get_question_key(selected['text'], language)
-        self._add_to_history(user_id, question_key)
+        # Выбираем случайный вопрос
+        selected = random.choice(shuffled)
+        normalized = self._normalize_question(selected['text'])
+        q_hash = self._create_question_hash(normalized)
+        self._add_to_history(user_id, q_hash)
         
         return selected['text'], selected['answer'], selected['category']
     
-    def _get_question_key(self, question_text, language):
-        """Создает ключ для вопроса"""
-        normalized = question_text.lower().strip()
-        normalized = re.sub(r'[^\w\s]', '', normalized)
-        normalized = ' '.join(normalized.split())
-        return f"{language}:{normalized}"
-    
-    def _is_similar_to_history(self, question_key, history, threshold=0.7):
-        """Проверяет схожесть вопросов"""
-        question_words = set(question_key.split())
-        if len(question_words) < 3:
-            return False
-        
-        recent = list(history)[-30:]
-        for hist_key in recent:
-            hist_words = set(hist_key.split())
-            if len(hist_words) < 3:
-                continue
-            intersection = question_words & hist_words
-            union = question_words | hist_words
-            if union and len(intersection) / len(union) > threshold:
-                return True
-        return False
-    
-    def _add_to_history(self, user_id, question_key):
-        """Добавляет в историю"""
+    def _add_to_history(self, user_id, question_hash):
+        """Добавляет вопрос в историю"""
         if user_id not in self.user_history:
             self.user_history[user_id] = []
-        self.user_history[user_id].append(question_key)
+        
+        self.user_history[user_id].append(question_hash)
+        
         while len(self.user_history[user_id]) > self.max_history:
             self.user_history[user_id].pop(0)
     
-    def _clean_old_entries(self, user_id, keep_last=50):
-        """Очищает старые записи"""
-        if user_id in self.user_history:
-            if len(self.user_history[user_id]) > keep_last:
-                self.user_history[user_id] = self.user_history[user_id][-keep_last:]
-    
     def clear_history(self, user_id):
-        """Очищает историю"""
+        """Очищает историю пользователя"""
         if user_id in self.user_history:
             self.user_history[user_id] = []
     
@@ -621,14 +665,20 @@ async def game_timeout(user_id, chat_id, message_id, context):
         game = user_games[user_id]
         lang = db.get_or_create_user(user_id)['language']
         correct_word = "ДА" if game['correct_answer'] else "НЕТ" if lang == 'ru' else "YES" if game['correct_answer'] else "NO"
+        
         db.update_score(user_id, game['score'])
         if chat_id and chat_id < 0:
             db.update_group_score(chat_id, user_id, game['score'])
+        
         del user_games[user_id]
         if user_id in game_timers:
             del game_timers[user_id]
+        
         try:
-            keyboard = [[InlineKeyboardButton(get_text(user_id, 'play_again'), callback_data="new_game")]]
+            keyboard = [
+                [InlineKeyboardButton(get_text(user_id, 'play_again'), callback_data="new_game")],
+                [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]
+            ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await context.bot.edit_message_text(
                 get_text(user_id, 'timeout', correct_word, game['score']),
@@ -640,7 +690,7 @@ async def game_timeout(user_id, chat_id, message_id, context):
         except Exception as e:
             logging.error(f"Error in timeout: {e}")
 
-# ========== ОБРАБОТЧИКИ КОМАНД ==========
+# ========== ОБРАБОТЧИКИ ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     db.get_or_create_user(user.id, user.username, user.first_name, user.last_name)
@@ -649,6 +699,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(get_text(user.id, 'new_game'), callback_data="new_game")],
         [InlineKeyboardButton(get_text(user.id, 'choose_category'), callback_data="categories")],
         [InlineKeyboardButton(get_text(user.id, 'leaderboard'), callback_data="leaderboard")],
+        [InlineKeyboardButton(get_text(user.id, 'stats'), callback_data="question_stats")],
         [InlineKeyboardButton(get_text(user.id, 'language'), callback_data="language")]
     ]
     if update.effective_chat and update.effective_chat.type in ['group', 'supergroup']:
@@ -796,7 +847,6 @@ async def show_group_leaderboard(update: Update, context: ContextTypes.DEFAULT_T
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
 async def show_question_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает статистику вопросов"""
     query = update.callback_query
     await query.answer()
     user_id = update.effective_user.id
@@ -808,7 +858,7 @@ async def show_question_stats(update: Update, context: ContextTypes.DEFAULT_TYPE
     questions_list = question_db.get_questions_by_category(lang, category)
     history = set(question_manager.user_history.get(user_id, []))
     
-    available = sum(1 for q in questions_list if question_manager._get_question_key(q['text'], lang) not in history)
+    available = sum(1 for q in questions_list if question_manager._create_question_hash(question_manager._normalize_question(q['text'])) not in history)
     
     cat_name = CATEGORIES.get(category, CATEGORIES['mixed'])[f'name_{lang}']
     cat_emoji = CATEGORIES.get(category, CATEGORIES['mixed'])['emoji']
@@ -842,6 +892,58 @@ async def show_question_stats(update: Update, context: ContextTypes.DEFAULT_TYPE
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
+async def handle_back_during_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохраняет результат при выходе из игры"""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    
+    game = user_games.get(user_id)
+    if game:
+        await cancel_timer(user_id)
+        
+        current_score = game['score']
+        lang = db.get_or_create_user(user_id)['language']
+        
+        is_record = db.update_score(user_id, current_score)
+        
+        if chat_id < 0:
+            user = update.effective_user
+            db.update_group_score(chat_id, user_id, current_score, user.first_name)
+        
+        del user_games[user_id]
+        
+        user_data = db.get_or_create_user(user_id)
+        user_rank = db.get_user_rank(user_id)
+        
+        if lang == 'ru':
+            save_message = (
+                f"💾 *Игра прервана!*\n\n"
+                f"📊 Набрано очков: *{current_score}*\n"
+                f"🏅 Лучший результат: *{user_data['best_score']}*\n"
+                f"📈 Место в топе: *#{user_rank}*\n"
+                f"🎮 Всего игр: *{user_data['games_played']}*\n\n"
+                f"✅ Результат сохранён!"
+            )
+        else:
+            save_message = (
+                f"💾 *Game interrupted!*\n\n"
+                f"📊 Points scored: *{current_score}*\n"
+                f"🏅 Best score: *{user_data['best_score']}*\n"
+                f"📈 Rank: *#{user_rank}*\n"
+                f"🎮 Games played: *{user_data['games_played']}*\n\n"
+                f"✅ Score saved!"
+            )
+        
+        if is_record and current_score > 0:
+            save_message += "\n\n🎉 *НОВЫЙ РЕКОРД!* 🎉"
+        
+        await query.edit_message_text(save_message, parse_mode="Markdown")
+        await asyncio.sleep(2)
+    
+    await main_menu(update, context)
+
 async def new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -850,6 +952,16 @@ async def new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = db.get_or_create_user(user_id)
     lang = user_data['language']
     category = user_data['selected_category']
+    
+    # Сохраняем результат предыдущей игры
+    if user_id in user_games:
+        old_game = user_games[user_id]
+        old_score = old_game['score']
+        if old_score > 0:
+            db.update_score(user_id, old_score)
+            if chat_id < 0:
+                user = update.effective_user
+                db.update_group_score(chat_id, user_id, old_score, user.first_name)
     
     await cancel_timer(user_id)
     
@@ -869,7 +981,7 @@ async def new_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(get_text(user_id, 'yes'), callback_data="answer_yes"),
          InlineKeyboardButton(get_text(user_id, 'no'), callback_data="answer_no")],
-        [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]
+        [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="back_to_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -910,9 +1022,16 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         question_text, new_correct, question_category = question_manager.get_unique_question(user_id, lang, category)
         
         if not question_text:
-            await query.edit_message_text("❌ Вопросы закончились! Игра окончена.\n\n✅ Очки сохранены!")
             db.update_score(user_id, current_score)
+            if chat_id < 0:
+                user = update.effective_user
+                db.update_group_score(chat_id, user_id, current_score, user.first_name)
             del user_games[user_id]
+            
+            await query.edit_message_text(
+                f"🎉 *Все вопросы пройдены!*\n\n📊 Финальный счёт: *{current_score}* очков\n\n✅ Результат сохранён!",
+                parse_mode="Markdown"
+            )
             return
         
         user_games[user_id] = {
@@ -925,7 +1044,7 @@ async def handle_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton(get_text(user_id, 'yes'), callback_data="answer_yes"),
              InlineKeyboardButton(get_text(user_id, 'no'), callback_data="answer_no")],
-            [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]
+            [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="back_to_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -968,7 +1087,7 @@ async def welcome_new_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for member in update.message.new_chat_members:
         if member.id == context.bot.id:
             await update.message.reply_text(
-                f"🎮 *Привет! Я игровой бот «Угадай Да/Нет»*\n\n📖 *Как играть:*\n• Напиши /play чтобы начать игру\n• Выбери категорию вопросов\n• Нажми /grouptop — топ по группе\n\n⏱️ На ответ даётся {QUESTION_TIME_LIMIT} секунд!\n\nУдачи! 🍀",
+                f"🎮 *Привет! Я игровой бот «Угадай Да/Нет»*\n\n📖 *Как играть:*\n• Напиши /play чтобы начать игру\n• Выбери категорию вопросов\n• Нажми /grouptop — топ по группе\n• Нажми /stats — статистика вопросов\n\n⏱️ На ответ даётся {QUESTION_TIME_LIMIT} секунд!\n\nУдачи! 🍀",
                 parse_mode="Markdown"
             )
             return
@@ -979,6 +1098,15 @@ async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = db.get_or_create_user(user_id)
     lang = user_data['language']
     category = user_data['selected_category']
+    
+    if user_id in user_games:
+        old_game = user_games[user_id]
+        old_score = old_game['score']
+        if old_score > 0:
+            db.update_score(user_id, old_score)
+            if chat_id < 0:
+                user = update.effective_user
+                db.update_group_score(chat_id, user_id, old_score, user.first_name)
     
     await cancel_timer(user_id)
     
@@ -998,7 +1126,7 @@ async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton(get_text(user_id, 'yes'), callback_data="answer_yes"),
          InlineKeyboardButton(get_text(user_id, 'no'), callback_data="answer_no")],
-        [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="main_menu")]
+        [InlineKeyboardButton(get_text(user_id, 'back'), callback_data="back_to_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -1016,7 +1144,6 @@ async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     game_timers[user_id] = timer_task
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает статистику вопросов через команду"""
     user_id = update.effective_user.id
     user_data = db.get_or_create_user(user_id)
     lang = user_data['language']
@@ -1026,7 +1153,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     questions_list = question_db.get_questions_by_category(lang, category)
     history = set(question_manager.user_history.get(user_id, []))
     
-    available = sum(1 for q in questions_list if question_manager._get_question_key(q['text'], lang) not in history)
+    available = sum(1 for q in questions_list if question_manager._create_question_hash(question_manager._normalize_question(q['text'])) not in history)
     
     cat_name = CATEGORIES.get(category, CATEGORIES['mixed'])[f'name_{lang}']
     cat_emoji = CATEGORIES.get(category, CATEGORIES['mixed'])['emoji']
@@ -1062,8 +1189,9 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     TOKEN = os.environ.get("Yes_0r_No_Bot")
     if not TOKEN:
-        print("❌ Ошибка: BOT_TOKEN не найден! Добавь BOT_TOKEN")
-        print("Пример: export BOT_TOKEN='ваш_токен_бота'")
+        print("❌ Ошибка: BOT_TOKEN не найден!")
+        print("Добавь BOT_TOKEN в переменные окружения:")
+        print("export BOT_TOKEN='ваш_токен_бота'")
         return
     
     app = Application.builder().token(TOKEN).build()
@@ -1076,6 +1204,7 @@ def main():
     
     # Callback handlers
     app.add_handler(CallbackQueryHandler(main_menu, pattern="^main_menu$"))
+    app.add_handler(CallbackQueryHandler(handle_back_during_game, pattern="^back_to_menu$"))
     app.add_handler(CallbackQueryHandler(show_categories, pattern="^categories$"))
     app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'mixed'), pattern="^cat_mixed$"))
     app.add_handler(CallbackQueryHandler(lambda u,c: set_category(u,c,'science'), pattern="^cat_science$"))
@@ -1105,6 +1234,7 @@ def main():
     print("✅ /start - Главное меню")
     print("✅ /play - Быстрый старт игры")
     print("✅ /stats - Статистика вопросов")
+    print("💾 Результат сохраняется при выходе из игры!")
     print("=" * 60)
     
     app.run_polling()
