@@ -1,4 +1,3 @@
-python
 import random
 import logging
 import sqlite3
